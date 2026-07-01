@@ -113,3 +113,56 @@ Stage Summary:
   to functional state changes (node fade-in via React Flow, stream flow indicator).
 - Topology serializable + exportable. Solver-bound UI. Reconciler surfaces discrepancies.
 - Production-ready; verified interactive in the browser.
+
+---
+Task ID: UI-overhaul
+Agent: Orchestrator (main)
+Task: Execute the 5-step UI/UX overhaul — equipment glyph redesign, zinc palette, layout push-down fix, orthogonal streams, canvas + sidecar declutter.
+
+Work Log:
+- Step 0 (glyphs): Rewrote all 6 glyphs as illustrated process equipment with metallic cylindrical
+  shading (unique SVG gradient ids per node): CSTR (vessel + domed heads + motor + shaft + Rushton
+  impeller + baffles + liquid level), PFR (shell-and-tube with domed heads, tube sheets, 4 tubes,
+  baffles, flow arrow), Mixer (vessel with 2 inlets + conical bottom outlet), Separator (tall
+  trayed column with 9 sieve trays + alternating downcomers + top vapor / bottom bottoms outlets),
+  Feed/Product (horizontal drums with domed heads + liquid level). Bodies stay neutral metallic;
+  status is expressed only by the node card ring + dot.
+- ReactorNode: type-aware card sizing (separator tall, PFR wide), type-aware handles (feed =
+  source only, product = target only, separator = left target + top/bottom sources, others =
+  left/right), status ring as accent (emerald/amber/red dot + ring).
+- Step 1 (color): Migrated slate → zinc across globals.css, ReactorCanvas, ReactorNode, StreamEdge,
+  CopilotSidecar, DeepDiveOverlay, page.tsx. Canvas background now #09090b (true dark, zero blue
+  cast). Functional accents retained: cyan (selection/active), emerald/amber/red (status).
+- Step 2 (layout): Fixed the push-down bug. Root shell is now `min-h-screen lg:h-dvh lg:overflow-hidden`
+  so on desktop it is a strict fixed-height app with independent scroll regions (canvas + sidecar
+  scroll internally, footer pinned). Verified: rootScrollH=900=viewportH, gapBelowFooter=0, and
+  stays fixed even after LLM generation (the original trigger).
+- Step 3 (streams): Switched StreamEdge from getBezierPath to getSmoothStepPath with borderRadius=8
+  → orthogonal (stepped) routing, the P&ID/PFD industry convention. Flow-rate label + marching-ants
+  indicator retained.
+- Step 4 (canvas declutter): Replaced the 6-button add-unit row with a single "+" popover
+  (shadcn Popover listing all unit types with descriptions). Removed the status legend panel.
+  Removed the top-left topology counter (moved to footer). Minimap + zoom controls smaller and
+  zinc-themed.
+- Step 5 (sidecar declutter): Reasoning ticker is now collapsible (shadcn Collapsible) — shows a
+  slim "N steps" badge when collapsed, auto-expands during generation. Messages are quieter (no
+  rings, neutral zinc bubbles, tiny "you"/"copilot" labels). Quick actions collapsed to a single
+  horizontal scroll-row of compact ghost buttons. Removed helper text under input.
+- Footer consolidation: now carries species + unit/stream count + reactant flow balance + overall
+  status badge in one line.
+
+Verification (Agent Browser):
+- Layout push-down FIXED: rootScrollH=900=viewportH, gapBelowFooter=0, persists after generation ✓.
+- Metallic gradients render per-node (feed-n1, cstr-n2, pfr-n3, prod-n4) ✓.
+- Orthogonal edge paths confirmed (L-segment stepped routing, not cubic bezier) ✓.
+- Decluttered canvas: only "+" and delete buttons, no legend, no top-left counter ✓.
+- LLM generation: 8 reasoning steps, topology committed, solver ran (15.9% CSTR conversion,
+  residual 2.2e-16) ✓.
+- Mobile (390x844): stacks naturally, page scrolls, footer at content bottom ✓.
+- Lint clean; no console errors ✓.
+
+Stage Summary:
+- The app now reads as a process simulator, not an AI workflow builder: real equipment
+  illustrations, orthogonal P&ID streams, neutral charcoal substrate with semantic accents only.
+- All 5 planned steps executed without drifting from the original architecture (tri-pane,
+  verified solvers, generative-to-constructive, conservative status color-coding).

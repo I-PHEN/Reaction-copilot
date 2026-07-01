@@ -1,14 +1,15 @@
 "use client";
 
 import { memo } from "react";
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
 /**
- * StreamEdge
+ * StreamEdge — orthogonal (stepped) routing.
  * ---------------------------------------------------------------
- * Directional flow line. Stroke thickness scales with the molar flow
- * carried by the stream. A subtle marching-ants dash gives a "flow"
- * indicator without bouncy motion (functional state change only).
+ * Industry-standard P&ID/PFD flow lines use right-angle elbows, not
+ * curves. Stroke thickness scales with the molar flow carried by the
+ * stream. A subtle marching-ants dash gives a "flow" indicator without
+ * bouncy motion (functional state change only).
  */
 function StreamEdgeImpl({
   id,
@@ -22,17 +23,18 @@ function StreamEdgeImpl({
   selected,
 }: EdgeProps) {
   const flow = (data?.flowRate as number) ?? 8;
-  // Map flow [0..20] mol/s to stroke width [1.4..4.5]px.
-  const width = Math.max(1.4, Math.min(4.5, 1.4 + (flow / 20) * 3.1));
-  const color = selected ? "#22d3ee" : "#64748b";
+  // Map flow [0..20] mol/s to stroke width [1.4..4]px.
+  const width = Math.max(1.4, Math.min(4, 1.4 + (flow / 20) * 2.6));
+  const color = selected ? "#22d3ee" : "#52525b";
 
-  const [path, labelX, labelY] = getBezierPath({
+  const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 8,
   });
 
   return (
@@ -54,9 +56,9 @@ function StreamEdgeImpl({
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             pointerEvents: "none",
           }}
-          className="rounded bg-slate-950/80 px-1.5 py-0.5 font-mono text-[9px] text-slate-400"
+          className="rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
         >
-          {flow.toFixed(1)} mol/s
+          {flow.toFixed(1)}
         </div>
       </EdgeLabelRenderer>
     </>

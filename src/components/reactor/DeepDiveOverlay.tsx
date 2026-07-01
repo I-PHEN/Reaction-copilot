@@ -52,21 +52,21 @@ function Kpi({
 }) {
   const toneClass =
     tone === "blue"
-      ? "text-blue-300"
+      ? "text-cyan-300"
       : tone === "amber"
         ? "text-amber-300"
         : tone === "red"
           ? "text-red-300"
-          : "text-slate-100";
+          : "text-zinc-100";
   return (
-    <div className="rounded-md border border-slate-700/50 bg-slate-950/50 px-2 py-1.5">
-      <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-slate-500">
+    <div className="rounded-md border border-zinc-800/60 bg-zinc-950/60 px-2 py-1.5">
+      <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
         <Icon className="h-2.5 w-2.5" />
         {label}
       </div>
       <div className={cn("mt-0.5 font-mono text-sm font-semibold tabular-nums", toneClass)}>
         {value}
-        {unit && <span className="ml-0.5 text-[10px] font-normal text-slate-500">{unit}</span>}
+        {unit && <span className="ml-0.5 text-[10px] font-normal text-zinc-500">{unit}</span>}
       </div>
     </div>
   );
@@ -92,10 +92,10 @@ function ParamControl({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
-        <span className="font-mono text-[11px] text-slate-200">
+        <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="font-mono text-[11px] text-zinc-200">
           {value.toFixed(step < 1 ? 2 : 0)}
-          <span className="ml-0.5 text-slate-500">{unit}</span>
+          <span className="ml-0.5 text-zinc-500">{unit}</span>
         </span>
       </div>
       <Slider
@@ -139,7 +139,7 @@ function DeepDiveCard({
   return (
     <div
       className={cn(
-        "glass-card flex w-[290px] flex-col gap-2 rounded-xl border border-slate-600/40 bg-slate-900/70 p-3 backdrop-blur-md",
+        "glass-card flex w-[290px] flex-col gap-2 rounded-xl border border-zinc-700/40 bg-zinc-900/70 p-3 backdrop-blur-md",
         "shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-inset",
         meta.ring,
       )}
@@ -147,10 +147,10 @@ function DeepDiveCard({
       {/* header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
             {node.type}
           </span>
-          <span className="text-sm font-semibold text-slate-100">{node.label}</span>
+          <span className="text-sm font-semibold text-zinc-100">{node.label}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -158,7 +158,7 @@ function DeepDiveCard({
             title={isPinned ? "Unpin" : "Pin for comparison"}
             className={cn(
               "rounded p-1 transition-colors",
-              isPinned ? "text-cyan-300 hover:bg-cyan-500/20" : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200",
+              isPinned ? "text-cyan-300 hover:bg-cyan-500/20" : "text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-200",
             )}
           >
             {isPinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
@@ -167,7 +167,7 @@ function DeepDiveCard({
       </div>
 
       {/* status banner */}
-      <div className={cn("flex items-center gap-1.5 rounded-md bg-slate-950/60 px-2 py-1", meta.color)}>
+      <div className={cn("flex items-center gap-1.5 rounded-md bg-zinc-950/60 px-2 py-1", meta.color)}>
         <meta.Icon className="h-3 w-3" />
         <span className="text-[10px] font-semibold uppercase tracking-wide">{meta.label}</span>
         {!result?.converged && (
@@ -189,8 +189,8 @@ function DeepDiveCard({
 
       {/* profile chart for PFR */}
       {!compact && chartData.length > 0 && (
-        <div className="rounded-md border border-slate-700/50 bg-slate-950/50 p-2">
-          <div className="mb-1 text-[9px] uppercase tracking-wider text-slate-500">
+        <div className="rounded-md border border-zinc-800/50 bg-zinc-950/50 p-2">
+          <div className="mb-1 text-[9px] uppercase tracking-wider text-zinc-500">
             Axial conversion profile
           </div>
           <ResponsiveContainer width="100%" height={70}>
@@ -234,8 +234,8 @@ function DeepDiveCard({
 
       {/* parameter controls — constructive iteration, bypasses LLM */}
       {!compact && (isReactor || node.type === "separator" || node.type === "feed") && (
-        <div className="space-y-2 rounded-md border border-slate-700/50 bg-slate-950/40 p-2">
-          <div className="text-[9px] uppercase tracking-wider text-slate-500">
+        <div className="space-y-2 rounded-md border border-zinc-800/50 bg-zinc-950/40 p-2">
+          <div className="text-[9px] uppercase tracking-wider text-zinc-500">
             Parameters · solver-bound
           </div>
           {isReactor && (
@@ -299,7 +299,7 @@ function DeepDiveCard({
       {compact && (
         <button
           onClick={() => selectNode(node.id)}
-          className="mt-0.5 w-full rounded-md border border-slate-700/50 bg-slate-800/60 py-1 text-[10px] font-medium text-slate-300 transition-colors hover:bg-slate-700/60 hover:text-white"
+          className="mt-0.5 w-full rounded-md border border-zinc-800/50 bg-zinc-800/60 py-1 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-700/60 hover:text-white"
         >
           Inspect
         </button>

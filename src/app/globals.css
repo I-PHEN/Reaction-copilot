@@ -121,11 +121,11 @@
   }
 }
 
-/* ---- Reactor canvas: dark engineering workspace -------------------- */
+/* ---- Reactor canvas: neutral dark engineering workspace ------------ */
 .reactor-canvas {
-  background-color: #0b1220;
+  background-color: #09090b;
   background-image:
-    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.10) 1px, transparent 0);
+    radial-gradient(circle at 1px 1px, rgba(63, 63, 70, 0.35) 1px, transparent 0);
   background-size: 22px 22px;
 }
 
@@ -135,28 +135,28 @@
   }
 }
 
-/* React Flow dark theming */
+/* React Flow dark theming (zinc) */
 .react-flow__attribution {
   background: transparent !important;
-  color: #475569 !important;
+  color: #3f3f46 !important;
 }
 .react-flow__controls {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
-  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 6px !important;
   overflow: hidden;
 }
 .react-flow__controls-button {
-  background: #1e293b !important;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12) !important;
-  color: #cbd5e1 !important;
-  fill: #cbd5e1 !important;
+  background: #18181b !important;
+  border-bottom: 1px solid #27272a !important;
+  color: #a1a1aa !important;
+  fill: #a1a1aa !important;
 }
 .react-flow__controls-button:hover {
-  background: #334155 !important;
+  background: #27272a !important;
 }
 .react-flow__minimap {
-  background: #0f172a !important;
-  border-radius: 8px !important;
+  background: #09090b !important;
+  border-radius: 6px !important;
   overflow: hidden;
 }
 .react-flow__edge-path {
@@ -175,9 +175,9 @@
   background: transparent;
 }
 .eng-scroll::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
+  background: rgba(82, 82, 91, 0.4);
   border-radius: 3px;
 }
 .eng-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: rgba(82, 82, 91, 0.6);
 }

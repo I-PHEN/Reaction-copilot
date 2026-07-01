@@ -9,46 +9,23 @@ import {
   Recycle,
   Gauge,
   FlaskConical,
+  ChevronDown,
   Eraser,
-  ChevronRight,
 } from "lucide-react";
 import { useTopology } from "@/lib/store/topology";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import type { ReactorNetwork } from "@/lib/solvers";
 
 const QUICK_ACTIONS = [
-  {
-    id: "optimize-yield",
-    label: "Optimize for yield",
-    icon: Zap,
-    prompt:
-      "Optimize this network for maximum yield of B. Increase reactor volumes and temperature within safe limits to push conversion above 90%, and verify the kinetic model still converges.",
-  },
-  {
-    id: "add-recycle",
-    label: "Add recycle loop",
-    icon: Recycle,
-    prompt:
-      "Add a recycle loop from the separator back to the first reactor to recover unreacted A and improve overall conversion. Include a mixer before the first reactor.",
-  },
-  {
-    id: "two-stage",
-    label: "2-stage CSTR+PFR",
-    icon: Gauge,
-    prompt:
-      "Design a two-stage reactor train: a CSTR followed by a PFR in series, with a feed of A at 10 mol/s, CA0 5 mol/m3, v0 2 m3/s, targeting 95% conversion of the first-order reaction A -> B.",
-  },
-  {
-    id: "separation",
-    label: "Add separation train",
-    icon: FlaskConical,
-    prompt:
-      "Add a separator after the reactor train to split product B from unreacted A, with a light-key split fraction of 0.9, followed by a product stream.",
-  },
+  { id: "optimize-yield", label: "Optimize yield", icon: Zap, prompt: "Optimize this network for maximum yield of B. Increase reactor volumes and temperature within safe limits to push conversion above 90%, and verify the kinetic model still converges." },
+  { id: "add-recycle", label: "Add recycle", icon: Recycle, prompt: "Add a recycle loop from the separator back to the first reactor to recover unreacted A and improve overall conversion. Include a mixer before the first reactor." },
+  { id: "two-stage", label: "2-stage train", icon: Gauge, prompt: "Design a two-stage reactor train: a CSTR followed by a PFR in series, with a feed of A at 10 mol/s, CA0 5 mol/m3, v0 2 m3/s, targeting 95% conversion of the first-order reaction A -> B." },
+  { id: "separation", label: "Separation", icon: FlaskConical, prompt: "Add a separator after the reactor train to split product B from unreacted A, with a light-key split fraction of 0.9, followed by a product stream." },
 ];
 
 interface CopilotResponse {
@@ -59,6 +36,7 @@ interface CopilotResponse {
 
 export function CopilotSidecar() {
   const [input, setInput] = useState("");
+  const [reasoningOpen, setReasoningOpen] = useState(false);
   const messages = useTopology((s) => s.copilotMessages);
   const reasoning = useTopology((s) => s.reasoning);
   const isGenerating = useTopology((s) => s.isGenerating);
@@ -80,6 +58,11 @@ export function CopilotSidecar() {
     reasoningEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [reasoning]);
 
+  // Auto-expand the ticker while the copilot is actively reasoning.
+  useEffect(() => {
+    if (isGenerating) setReasoningOpen(true);
+  }, [isGenerating]);
+
   const runPrompt = async (prompt: string) => {
     if (!prompt.trim() || isGenerating) return;
     setInput("");
@@ -100,26 +83,16 @@ export function CopilotSidecar() {
       if (!res.ok) throw new Error(`Copilot error ${res.status}`);
       const data = (await res.json()) as CopilotResponse;
 
-      // Stream the reasoning steps into the ticker with a small stagger
-      // so the user perceives the AI "thinking".
       for (let i = 0; i < data.reasoning.length; i++) {
         const step = data.reasoning[i];
-        const kind = /select|choose|cstr|pfr/i.test(step)
-          ? "select"
-          : /verify|check|converg|kinetic|constraint/i.test(step)
-            ? "verify"
-            : /layout|position|place|route/i.test(step)
-              ? "layout"
-              : "info";
-        // staggered push
+        const kind = /select|choose|cstr|pfr/i.test(step) ? "select" : /verify|check|converg|kinetic|constraint/i.test(step) ? "verify" : /layout|position|place|route/i.test(step) ? "layout" : "info";
         setTimeout(() => pushReasoning(step, kind), 280 * (i + 1));
       }
 
-      // Apply topology after reasoning has begun streaming.
       setTimeout(() => {
         if (data.topology?.nodes?.length) {
           setNetwork(data.topology);
-          pushReasoning("Topology committed to canvas · dispatching verified solvers", "info");
+          pushReasoning("Topology committed · dispatching verified solvers", "info");
         }
         pushMessage({ role: "copilot", content: data.message });
         setGenerating(false);
@@ -128,124 +101,120 @@ export function CopilotSidecar() {
       setGenerating(false);
       pushMessage({
         role: "copilot",
-        content:
-          "I could not reach the reasoning engine. The verified solver layer is still active — adjust parameters directly in the Deep Dive panel.",
+        content: "Could not reach the reasoning engine. The verified solver layer is still active — adjust parameters in the Deep Dive panel.",
       });
       toast.error("Copilot request failed", { description: (e as Error).message });
     }
   };
 
+  const activeReasoning = isGenerating || reasoning.length > 0;
+
   return (
-    <div className="flex h-full flex-col bg-slate-950/60">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/15">
-          <Sparkles className="h-4 w-4 text-cyan-400" />
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-slate-100">Synthesis Copilot</div>
-          <div className="text-[10px] text-slate-500">Reactor engineering partner · grounded in verified solvers</div>
-        </div>
+    <div className="flex h-full flex-col bg-zinc-950">
+      {/* Header — minimal */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2.5">
+        <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+        <span className="text-[13px] font-medium text-zinc-200">Synthesis Copilot</span>
+        <span className="ml-auto font-mono text-[10px] text-zinc-600">verified solvers</span>
       </div>
 
-      {/* Quick actions */}
-      <div className="border-b border-slate-800 px-3 py-2.5">
-        <div className="mb-1.5 text-[9px] uppercase tracking-wider text-slate-500">Quick Actions</div>
-        <div className="grid grid-cols-2 gap-1.5">
+      {/* Quick actions — single compact row */}
+      <div className="shrink-0 border-b border-zinc-800/80 px-3 py-2">
+        <div className="eng-scroll flex gap-1.5 overflow-x-auto pb-0.5">
           {QUICK_ACTIONS.map((a) => (
             <button
               key={a.id}
               disabled={isGenerating}
               onClick={() => runPrompt(a.prompt)}
-              className="flex items-center gap-1.5 rounded-md border border-slate-700/60 bg-slate-900/60 px-2 py-1.5 text-left text-[11px] font-medium text-slate-300 transition-colors hover:border-cyan-500/40 hover:bg-slate-800/70 hover:text-cyan-200 disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:opacity-40"
             >
-              <a.icon className="h-3 w-3 shrink-0 text-cyan-400" />
-              <span className="truncate">{a.label}</span>
+              <a.icon className="h-3 w-3 text-cyan-500/70" />
+              {a.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Reasoning Ticker */}
-      <div className="border-b border-slate-800">
-        <div className="flex items-center justify-between px-4 pt-2.5">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
-            <Brain className="h-3 w-3 text-violet-400" />
-            Reasoning Ticker
-          </div>
-          {reasoning.length > 0 && (
-            <button
-              onClick={clearReasoning}
-              className="flex items-center gap-1 text-[9px] text-slate-500 hover:text-slate-300"
-            >
-              <Eraser className="h-2.5 w-2.5" /> clear
-            </button>
+      {/* Reasoning ticker — collapsible */}
+      <Collapsible open={reasoningOpen} onOpenChange={setReasoningOpen} className="shrink-0 border-b border-zinc-800/80">
+        <CollapsibleTrigger className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-zinc-900/50">
+          <Brain className={cn("h-3 w-3", activeReasoning ? "text-violet-400" : "text-zinc-600")} />
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">Reasoning</span>
+          {isGenerating && (
+            <span className="flex gap-0.5">
+              <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400" />
+              <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400 [animation-delay:120ms]" />
+              <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400 [animation-delay:240ms]" />
+            </span>
           )}
-        </div>
-        <ScrollArea className="eng-scroll h-24 px-4 py-2">
-          {reasoning.length === 0 ? (
-            <div className="text-[10px] italic text-slate-600">No active reasoning. Submit a prompt or quick action.</div>
-          ) : (
-            <div className="space-y-1">
-              {reasoning.map((r) => (
-                <div key={r.id} className="flex items-start gap-1.5 text-[11px] leading-snug">
-                  <span
-                    className={cn(
-                      "mt-1 h-1 w-1 shrink-0 rounded-full",
-                      r.kind === "select" && "bg-cyan-400",
-                      r.kind === "verify" && "bg-emerald-400",
-                      r.kind === "layout" && "bg-violet-400",
-                      r.kind === "info" && "bg-slate-500",
-                    )}
-                  />
-                  <span className="text-slate-300">{r.text}</span>
-                </div>
-              ))}
-              <div ref={reasoningEndRef} />
-            </div>
+          {reasoning.length > 0 && !isGenerating && (
+            <span className="font-mono text-[10px] text-zinc-600">{reasoning.length} steps</span>
           )}
-        </ScrollArea>
-      </div>
-
-      {/* Intent Feed */}
-      <ScrollArea className="eng-scroll flex-1 px-4 py-3">
-        <div className="space-y-3">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={cn(
-                "flex flex-col gap-1",
-                m.role === "user" ? "items-end" : "items-start",
-              )}
-            >
-              <div
-                className={cn(
-                  "max-w-[92%] rounded-lg px-3 py-2 text-[12px] leading-relaxed",
-                  m.role === "user"
-                    ? "bg-cyan-500/15 text-cyan-50 ring-1 ring-cyan-500/20"
-                    : "bg-slate-800/60 text-slate-200 ring-1 ring-slate-700/50",
-                )}
+          <ChevronDown className={cn("ml-auto h-3.5 w-3.5 text-zinc-600 transition-transform", reasoningOpen && "rotate-180")} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="eng-scroll max-h-32 overflow-y-auto px-4 pb-2">
+            {reasoning.length === 0 ? (
+              <div className="text-[11px] italic text-zinc-700">No active reasoning.</div>
+            ) : (
+              <div className="space-y-1">
+                {reasoning.map((r) => (
+                  <div key={r.id} className="flex items-start gap-1.5 text-[11px] leading-snug">
+                    <span
+                      className={cn(
+                        "mt-1 h-1 w-1 shrink-0 rounded-full",
+                        r.kind === "select" && "bg-cyan-400",
+                        r.kind === "verify" && "bg-emerald-400",
+                        r.kind === "layout" && "bg-violet-400",
+                        r.kind === "info" && "bg-zinc-600",
+                      )}
+                    />
+                    <span className="text-zinc-400">{r.text}</span>
+                  </div>
+                ))}
+                <div ref={reasoningEndRef} />
+              </div>
+            )}
+            {reasoning.length > 0 && (
+              <button
+                onClick={clearReasoning}
+                className="mt-1.5 flex items-center gap-1 text-[9px] text-zinc-600 hover:text-zinc-400"
               >
-                {m.content}
+                <Eraser className="h-2.5 w-2.5" /> clear
+              </button>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Intent feed — the main flexible region */}
+      <ScrollArea className="eng-scroll flex-1 px-4 py-3">
+        <div className="space-y-2.5">
+          {messages.map((m) => (
+            <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+              <div className={cn("max-w-[90%]", m.role === "user" ? "text-right" : "text-left")}>
+                <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-zinc-700">
+                  {m.role === "user" ? "you" : "copilot"}
+                </div>
+                <div
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-[12px] leading-relaxed",
+                    m.role === "user"
+                      ? "bg-zinc-800 text-zinc-200"
+                      : "bg-zinc-900 text-zinc-300",
+                  )}
+                >
+                  {m.content}
+                </div>
               </div>
             </div>
           ))}
-          {isGenerating && (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <span className="flex gap-0.5">
-                <span className="h-1 w-1 animate-pulse rounded-full bg-cyan-400" />
-                <span className="h-1 w-1 animate-pulse rounded-full bg-cyan-400 [animation-delay:120ms]" />
-                <span className="h-1 w-1 animate-pulse rounded-full bg-cyan-400 [animation-delay:240ms]" />
-              </span>
-              synthesizing flowsheet…
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
-      {/* Input */}
-      <div className="border-t border-slate-800 p-3">
+      {/* Input — minimal */}
+      <div className="shrink-0 border-t border-zinc-800/80 p-3">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -258,21 +227,17 @@ export function CopilotSidecar() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe a reactor network…"
             disabled={isGenerating}
-            className="border-slate-700 bg-slate-900/70 text-sm text-slate-100 placeholder:text-slate-600 focus-visible:ring-cyan-500/40"
+            className="border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-cyan-500/30"
           />
           <Button
             type="submit"
             size="icon"
             disabled={isGenerating || !input.trim()}
-            className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+            className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400"
           >
             <Send className="h-4 w-4" />
           </Button>
         </form>
-        <div className="mt-2 flex items-center gap-1 text-[9px] text-slate-600">
-          <ChevronRight className="h-2.5 w-2.5" />
-          Generated baselines are inspectable — adjust params in the Deep Dive to iterate.
-        </div>
       </div>
     </div>
   );
