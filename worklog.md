@@ -166,3 +166,31 @@ Stage Summary:
   illustrations, orthogonal P&ID streams, neutral charcoal substrate with semantic accents only.
 - All 5 planned steps executed without drifting from the original architecture (tri-pane,
   verified solvers, generative-to-constructive, conservative status color-coding).
+
+---
+Task ID: UX-fixes-2
+Agent: Orchestrator (main)
+Task: Fix distracting hover KPI popup (obstructs dragging) and minimap/zoom-control overlap.
+
+Work Log:
+- Removed the hover KPI strip from ReactorNode entirely. Rationale: it duplicated the Deep
+  Dive overlay's data (which already shows full KPIs for the selected node), and it fired on
+  mouseenter — exactly when the user is trying to grab and drag a node. The node keeps its
+  status dot (emerald/amber/red) for at-a-glance state. Drag is now fully unobstructed.
+- Removed the now-dead hoveredNodeId / setHovered state from the topology store.
+- Removed the MiniMap from ReactorCanvas. Rationale: a minimap is a navigation aid for large
+  graphs (50+ nodes); reactor networks are 3-7 nodes where fitView + zoom controls suffice.
+  Removing it eliminates the minimap/zoom-control overlap definitively and further declutters
+  the canvas. Removed the now-unused nodeColor helper.
+- Zoom controls (with fit-view) retained at bottom-right.
+
+Verification (Agent Browser):
+- Node height identical before/after hover (47.4 → 47.4) — no popup grows on hover ✓.
+- Minimap element count = 0 (removed) ✓.
+- Zoom controls count = 1 (retained) ✓.
+- Deep Dive overlay still shows full KPIs on selection (17.7% conv, 1.00s τ, 358K) ✓.
+- No console errors; dev log clean ✓.
+
+Stage Summary:
+- Canvas is cleaner and drag is unobstructed. KPIs live in exactly one place (Deep Dive
+  overlay, on selection). No more redundant hover popups or minimap/control collision.

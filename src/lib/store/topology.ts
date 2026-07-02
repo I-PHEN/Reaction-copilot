@@ -47,7 +47,6 @@ interface TopologyState {
   report: SolverReport | null;
   selectedNodeId: string | null;
   pinnedNodeIds: string[];
-  hoveredNodeId: string | null;
   copilotMessages: CopilotMessage[];
   reasoning: ReasoningStep[];
   isGenerating: boolean;
@@ -64,7 +63,6 @@ interface TopologyState {
   connectNodes: (source: string, target: string) => void;
 
   selectNode: (id: string | null) => void;
-  setHovered: (id: string | null) => void;
   togglePin: (id: string) => void;
   unpin: (id: string) => void;
 
@@ -145,7 +143,6 @@ export const useTopology = create<TopologyState>((set, get) => ({
   report: null,
   selectedNodeId: "cstr-1",
   pinnedNodeIds: [],
-  hoveredNodeId: null,
   copilotMessages: [
     {
       id: "m0",
@@ -236,7 +233,6 @@ export const useTopology = create<TopologyState>((set, get) => ({
   connectNodes: (source, target) => get().addStream(source, target),
 
   selectNode: (id) => set({ selectedNodeId: id }),
-  setHovered: (id) => set({ hoveredNodeId: id }),
   togglePin: (id) =>
     set((s) => ({
       pinnedNodeIds: s.pinnedNodeIds.includes(id)

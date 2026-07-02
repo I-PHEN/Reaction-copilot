@@ -4,7 +4,6 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { GLYPHS } from "../glyphs";
 import type { NodeType, SolverResult } from "@/lib/solvers";
-import { useTopology } from "@/lib/store/topology";
 import { cn } from "@/lib/utils";
 
 export interface ReactorNodeData {
@@ -39,14 +38,9 @@ const CARD_SIZE: Record<NodeType, { w: number; glyphH: number }> = {
 function ReactorNodeImpl({ id, data, selected }: NodeProps) {
   const nodeData = data as ReactorNodeData;
   const Glyph = GLYPHS[nodeData.type];
-  const hoveredId = useTopology((s) => s.hoveredNodeId);
-  const setHovered = useTopology((s) => s.setHovered);
   const result = nodeData.result;
   const status = result?.status ?? "nominal";
-  const isHovered = hoveredId === id;
   const size = CARD_SIZE[nodeData.type];
-
-  const showKpi = isHovered && result && (nodeData.type === "cstr" || nodeData.type === "pfr");
 
   // Handles are type-aware so connections stay physically meaningful.
   const isFeed = nodeData.type === "feed";
@@ -61,8 +55,6 @@ function ReactorNodeImpl({ id, data, selected }: NodeProps) {
         STATUS_RING[status],
         selected && "ring-2 ring-cyan-400/80 shadow-[0_0_0_1px_rgba(34,211,238,0.45)]",
       )}
-      onMouseEnter={() => setHovered(id)}
-      onMouseLeave={() => setHovered(null)}
     >
       {!isFeed && (
         <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-zinc-500" />
@@ -84,20 +76,6 @@ function ReactorNodeImpl({ id, data, selected }: NodeProps) {
       <div className="mt-1 text-center text-[11px] font-medium text-zinc-200">
         {nodeData.label}
       </div>
-
-      {/* hover KPI strip — only for reactors */}
-      {showKpi && (
-        <div className="mt-1.5 w-full rounded bg-zinc-950/90 px-2 py-1 font-mono text-[10px] text-zinc-300">
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-600">X</span>
-            <span className="text-zinc-100">{(result!.conversion * 100).toFixed(1)}%</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-600">τ</span>
-            <span className="text-zinc-100">{result!.residenceTime.toFixed(2)}s</span>
-          </div>
-        </div>
-      )}
 
       {!isProduct && !isSeparator && (
         <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-zinc-500" />

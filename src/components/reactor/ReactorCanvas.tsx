@@ -5,7 +5,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -35,18 +34,6 @@ const UNIT_OPTIONS: { type: ReactorNodeData["type"]; desc: string }[] = [
   { type: "separator", desc: "Trayed separator" },
   { type: "product", desc: "Outlet sink" },
 ];
-
-function nodeColor(type: string) {
-  switch (type) {
-    case "feed": return "#22c55e";
-    case "cstr": return "#52525b";
-    case "pfr": return "#52525b";
-    case "mixer": return "#52525b";
-    case "separator": return "#52525b";
-    case "product": return "#ec4899";
-    default: return "#52525b";
-  }
-}
 
 function AddUnitButton() {
   const addNode = useTopology((s) => s.addNode);
@@ -178,13 +165,6 @@ function CanvasInner() {
         <Controls
           className="!bottom-3 !right-3 !rounded-md !overflow-hidden !border !border-zinc-800"
           showInteractive={false}
-        />
-        <MiniMap
-          className="!bottom-3 !left-3 !h-24 !w-40 !rounded-md !border !border-zinc-800"
-          nodeColor={(n) => nodeColor((n.data as ReactorNodeData)?.type ?? "")}
-          maskColor="rgba(9,9,11,0.75)"
-          pannable
-          zoomable
         />
 
         {/* Single top-right control cluster: add-unit + delete */}
