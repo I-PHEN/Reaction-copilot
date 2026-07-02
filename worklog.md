@@ -237,3 +237,47 @@ Stage Summary:
 - Thinking lives where it belongs: inline in the conversation, not a separate panel. Modern
   chat aesthetic with right-aligned user bubbles, left-aligned labeled copilot text, and a
   distinct collapsible thinking block.
+
+---
+Task ID: UX-fixes-4
+Agent: Orchestrator (main)
+Task: Definitively fix the chat push-down bug and modernize the chat area.
+
+Work Log:
+- ROOT CAUSE of remaining push-down: the Radix ScrollArea Root is `relative` with no
+  bounded height and default `min-height: auto` as a flex child, so the feed grew to fit
+  its content instead of scrolling internally — pushing the composer (and shell) downward.
+- FIX: replaced the Radix ScrollArea with a native scroll div using
+  `absolute inset-0 overflow-y-auto` inside a `relative min-h-0 flex-1` wrapper. The
+  `min-h-0` lets the flex child shrink below content size → true internal scroll. The
+  composer is a shrink-0 sibling that is now physically pinned and cannot move.
+- Verified at 600px viewport: feedScrollH(601) > feedClientH(354) → feed scrolls internally;
+  composerVisible=true; rootScrollH=600=viewportH → page never grows.
+- Modernization features added:
+  1. Auto-resizing composer: raw <textarea rows=1> with useEffect auto-resize (capped 144px /
+     ~6 rows). Enter sends, Shift+Enter inserts newline. Wrapped in a rounded-xl bordered
+     container with focus-within styling.
+  2. Markdown copilot responses: react-markdown renders answers with bullet lists, bold,
+     inline code (minimal [&_-] styling classes) — engineering summaries read structured.
+  3. Stop button: AbortController cancels the in-flight fetch. While generating, the send
+     button swaps to a Stop (Square icon) button. On abort, "Stopped by user" is logged to
+     the thinking block and it finalizes cleanly.
+  4. Smart auto-scroll: feed sticks to bottom while new content streams (stickToBottomRef);
+     if the user scrolls up (>80px from bottom), auto-scroll pauses and a "↓ Latest" pill
+     appears centered at the feed bottom; clicking it jumps back to bottom.
+  5. Subtle timestamps: each user/copilot message shows a tiny time stamp on hover (opacity-0
+     → group-hover:opacity-100).
+- AbortError handling covers both the fetch-abort path and the reasoning-loop-abort path.
+
+Verification (Agent Browser):
+- Push-down FIXED: composerY identical before/during/after generation (822.5); at 600px
+  viewport feed scrolls internally (601>354) while composer stays pinned ✓.
+- Stop button: visible during generation, swaps back to Send after click, thinking finalized ✓.
+- Jump-to-latest: pill appears on scroll-up, disappears on click, feed returns to bottom ✓.
+- Auto-resizing textarea present with Enter/Shift+Enter placeholder ✓.
+- No runtime errors on clean reload; lint clean ✓.
+
+Stage Summary:
+- The chat area is now a modern, fixed-layout transcript: the composer never moves, the feed
+  scrolls internally, thinking streams inline, responses render as markdown, you can stop
+  mid-generation, and you get a jump-to-latest affordance when reading history.

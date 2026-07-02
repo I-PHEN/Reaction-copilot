@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Send,
   Sparkles,
@@ -10,18 +10,19 @@ import {
   FlaskConical,
   Brain,
   ChevronDown,
+  Square,
+  ArrowDown,
 } from "lucide-react";
 import { useTopology, type CopilotMessage } from "@/lib/store/topology";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
 import type { ReactorNetwork } from "@/lib/solvers";
 
 const QUICK_ACTIONS = [
@@ -37,6 +38,22 @@ interface CopilotResponse {
   topology: ReactorNetwork;
 }
 
+function fmtTime(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/* ------------------------------------------------------------------ */
+/* Markdown copilot body (lists, bold, code) — minimal styling.        */
+/* ------------------------------------------------------------------ */
+function CopilotBody({ content }: { content: string }) {
+  return (
+    <div className="text-[12.5px] leading-relaxed text-zinc-300 [&_a]:text-cyan-400 [&_a]:underline [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[11px] [&_code]:text-cyan-200 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:my-1 [&_strong]:text-zinc-100 [&_ul]:list-disc [&_ul]:pl-4">
+      <ReactMarkdown>{content}</ReactMarkdown>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Thinking block — inline in the chat feed, Claude/Gemini style.      */
 /* ------------------------------------------------------------------ */
@@ -45,11 +62,6 @@ function ThinkingBlock({ message }: { message: CopilotMessage }) {
   const steps = message.steps ?? [];
   const duration = message.durationMs ? (message.durationMs / 1000).toFixed(1) : null;
 
-  // Openness model:
-  //  - while active (thinking): always expanded
-  //  - once done: collapsed by default, but the user can re-expand.
-  //    `userToggled` captures an explicit user choice so the auto-collapse
-  //    on completion doesn't fight a manual expand.
   const [userToggled, setToggled] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const open = active ? true : userToggled ? userOpen : false;
@@ -81,10 +93,7 @@ function ThinkingBlock({ message }: { message: CopilotMessage }) {
               </span>
             )}
             <ChevronDown
-              className={cn(
-                "ml-auto h-3 w-3 text-zinc-700 transition-transform",
-                open && "rotate-180",
-              )}
+              className={cn("ml-auto h-3 w-3 text-zinc-700 transition-transform", open && "rotate-180")}
             />
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -120,6 +129,79 @@ function ThinkingBlock({ message }: { message: CopilotMessage }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Auto-resizing composer                                              */
+/* ------------------------------------------------------------------ */
+function Composer({
+  value,
+  onChange,
+  onSend,
+  onStop,
+  isGenerating,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  onStop: () => void;
+  isGenerating: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize: reset to auto then cap at 6 rows (~144px).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+  }, [value]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (value.trim() && !isGenerating) onSend();
+    }
+  };
+
+  return (
+    <div className="shrink-0 border-t border-zinc-800/80 p-3">
+      <div className="flex items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 transition-colors focus-within:border-zinc-700">
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Describe a reactor network…  (Enter to send, Shift+Enter for newline)"
+          rows={1}
+          disabled={isGenerating}
+          className="eng-scroll max-h-[144px] flex-1 resize-none bg-transparent text-sm leading-relaxed text-zinc-200 outline-none placeholder:text-zinc-600 disabled:opacity-50"
+        />
+        {isGenerating ? (
+          <Button
+            type="button"
+            size="icon"
+            onClick={onStop}
+            title="Stop generating"
+            className="h-8 w-8 shrink-0 bg-zinc-700 text-zinc-100 hover:bg-zinc-600"
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            onClick={onSend}
+            disabled={!value.trim()}
+            title="Send"
+            className="h-8 w-8 shrink-0 bg-cyan-500 text-zinc-950 hover:bg-cyan-400 disabled:opacity-40"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Sidecar                                                              */
 /* ------------------------------------------------------------------ */
 export function CopilotSidecar() {
@@ -134,20 +216,46 @@ export function CopilotSidecar() {
   const setNetwork = useTopology((s) => s.setNetwork);
   const network = useTopology((s) => s.network);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Smart auto-scroll: only stick to bottom if the user is already there.
+  const onFeedScroll = useCallback(() => {
+    const el = feedRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    stickToBottomRef.current = nearBottom;
+    setShowJump(!nearBottom);
+  }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = feedRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  const jumpToBottom = useCallback(() => {
+    const el = feedRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    stickToBottomRef.current = true;
+    setShowJump(false);
+  }, []);
 
   const runPrompt = async (prompt: string) => {
     if (!prompt.trim() || isGenerating) return;
     setInput("");
     pushMessage({ role: "user", content: prompt });
     setGenerating(true);
+    stickToBottomRef.current = true;
     const thinkId = startThinking();
     pushReasoning("Parsing engineering intent…", "info");
     pushReasoning("Loading first-order Arrhenius kinetic model", "verify");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await fetch("/api/copilot", {
@@ -156,13 +264,13 @@ export function CopilotSidecar() {
         body: JSON.stringify({
           prompt: `${prompt}\n\n[Current topology for context: ${network.nodes.length} units, ${network.streams.length} streams. You may extend or replace it.]`,
         }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`Copilot error ${res.status}`);
       const data = (await res.json()) as CopilotResponse;
 
-      // Stream the reasoning steps with a small stagger so the user
-      // perceives the AI "thinking" in real time.
       for (let i = 0; i < data.reasoning.length; i++) {
+        if (controller.signal.aborted) break;
         const step = data.reasoning[i];
         const kind = /select|choose|cstr|pfr/i.test(step)
           ? "select"
@@ -175,7 +283,13 @@ export function CopilotSidecar() {
         pushReasoning(step, kind);
       }
 
-      // Commit topology + finalize thinking, then print the answer.
+      if (controller.signal.aborted) {
+        pushReasoning("Stopped by user", "info");
+        finalizeThinking(thinkId);
+        setGenerating(false);
+        return;
+      }
+
       if (data.topology?.nodes?.length) {
         setNetwork(data.topology);
         pushReasoning("Topology committed · dispatching verified solvers", "info");
@@ -184,6 +298,12 @@ export function CopilotSidecar() {
       pushMessage({ role: "copilot", content: data.message });
       setGenerating(false);
     } catch (e) {
+      if ((e as Error).name === "AbortError") {
+        pushReasoning("Stopped by user", "info");
+        finalizeThinking(thinkId);
+        setGenerating(false);
+        return;
+      }
       finalizeThinking(thinkId);
       setGenerating(false);
       pushMessage({
@@ -191,11 +311,17 @@ export function CopilotSidecar() {
         content: "Could not reach the reasoning engine. The verified solver layer is still active — adjust parameters in the Deep Dive panel.",
       });
       toast.error("Copilot request failed", { description: (e as Error).message });
+    } finally {
+      abortRef.current = null;
     }
   };
 
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   return (
-    <div className="flex h-full flex-col bg-zinc-950">
+    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2.5">
         <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
@@ -203,7 +329,7 @@ export function CopilotSidecar() {
         <span className="ml-auto font-mono text-[10px] text-zinc-600">verified solvers</span>
       </div>
 
-      {/* Quick actions — single compact row */}
+      {/* Quick actions */}
       <div className="shrink-0 border-b border-zinc-800/80 px-3 py-2">
         <div className="eng-scroll flex gap-1.5 overflow-x-auto pb-0.5">
           {QUICK_ACTIONS.map((a) => (
@@ -220,64 +346,69 @@ export function CopilotSidecar() {
         </div>
       </div>
 
-      {/* Chat feed — the main flexible region */}
-      <ScrollArea className="eng-scroll flex-1">
-        <div className="space-y-4 px-4 py-4">
-          {messages.map((m) => {
-            if (m.role === "thinking") return <ThinkingBlock key={m.id} message={m} />;
-            if (m.role === "user") {
+      {/* Chat feed — NATIVE scroll, min-h-0 so it never pushes the composer */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={feedRef}
+          onScroll={onFeedScroll}
+          className="eng-scroll absolute inset-0 overflow-y-auto"
+        >
+          <div className="space-y-4 px-4 py-4">
+            {messages.map((m) => {
+              if (m.role === "thinking") return <ThinkingBlock key={m.id} message={m} />;
+              if (m.role === "user") {
+                return (
+                  <div key={m.id} className="group flex justify-end">
+                    <div className="flex max-w-[85%] flex-col items-end">
+                      <div className="rounded-2xl rounded-br-sm bg-zinc-800 px-3 py-2 text-[12.5px] leading-relaxed text-zinc-200 whitespace-pre-wrap">
+                        {m.content}
+                      </div>
+                      <span className="mt-0.5 px-1 text-[9px] text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
+                        {fmtTime(m.ts)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
               return (
-                <div key={m.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-zinc-800 px-3 py-2 text-[12.5px] leading-relaxed text-zinc-200">
-                    {m.content}
+                <div key={m.id} className="group flex justify-start">
+                  <div className="flex max-w-[92%] flex-col">
+                    <div className="mb-0.5 flex items-center gap-1">
+                      <Sparkles className="h-2.5 w-2.5 text-cyan-500/70" />
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-600">
+                        copilot
+                      </span>
+                    </div>
+                    <CopilotBody content={m.content} />
+                    <span className="mt-0.5 px-1 text-[9px] text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
+                      {fmtTime(m.ts)}
+                    </span>
                   </div>
                 </div>
               );
-            }
-            return (
-              <div key={m.id} className="flex justify-start">
-                <div className="max-w-[92%]">
-                  <div className="mb-0.5 flex items-center gap-1">
-                    <Sparkles className="h-2.5 w-2.5 text-cyan-500/70" />
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-600">
-                      copilot
-                    </span>
-                  </div>
-                  <div className="text-[12.5px] leading-relaxed text-zinc-300">{m.content}</div>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
+            })}
+          </div>
         </div>
-      </ScrollArea>
 
-      {/* Input */}
-      <div className="shrink-0 border-t border-zinc-800/80 p-3">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            runPrompt(input);
-          }}
-          className="flex items-center gap-2"
-        >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe a reactor network…"
-            disabled={isGenerating}
-            className="border-zinc-800 bg-zinc-900 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-cyan-500/30"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={isGenerating || !input.trim()}
-            className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400"
+        {/* Jump-to-latest pill */}
+        {showJump && (
+          <button
+            onClick={jumpToBottom}
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900/95 px-2.5 py-1 text-[10px] text-zinc-300 shadow-lg backdrop-blur transition-colors hover:border-zinc-600 hover:text-white"
           >
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
+            <ArrowDown className="h-2.5 w-2.5" />
+            Latest
+          </button>
+        )}
       </div>
+
+      <Composer
+        value={input}
+        onChange={setInput}
+        onSend={() => runPrompt(input)}
+        onStop={stop}
+        isGenerating={isGenerating}
+      />
     </div>
   );
 }
