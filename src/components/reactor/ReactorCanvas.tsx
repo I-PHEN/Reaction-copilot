@@ -80,6 +80,7 @@ function CanvasInner() {
   const network = useTopology((s) => s.network);
   const report = useTopology((s) => s.report);
   const selectedNodeId = useTopology((s) => s.selectedNodeId);
+  const inspectedNodeId = useTopology((s) => s.inspectedNodeId);
   const selectNode = useTopology((s) => s.selectNode);
   const updateNodePosition = useTopology((s) => s.updateNodePosition);
   const removeNode = useTopology((s) => s.removeNode);
@@ -143,6 +144,12 @@ function CanvasInner() {
     [connectNodes],
   );
 
+  const inspectNode = useTopology((s) => s.inspectNode);
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, n: Node) => inspectNode(n.id),
+    [inspectNode],
+  );
+
   return (
     <div className="reactor-canvas relative h-full w-full">
       <ReactFlow
@@ -154,6 +161,7 @@ function CanvasInner() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={(_, n) => selectNode(n.id)}
+        onNodeDoubleClick={onNodeDoubleClick}
         fitView
         fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
         minZoom={0.3}
@@ -181,6 +189,15 @@ function CanvasInner() {
             </button>
           </div>
         </Panel>
+
+        {/* Subtle discoverability hint — only when nothing is inspected */}
+        {!inspectedNodeId && (
+          <Panel position="top-left" className="!m-3">
+            <div className="rounded-md border border-zinc-800/60 bg-zinc-900/70 px-2.5 py-1 font-mono text-[10px] text-zinc-600 backdrop-blur">
+              double-click a unit to inspect
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );

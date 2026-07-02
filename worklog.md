@@ -194,3 +194,46 @@ Verification (Agent Browser):
 Stage Summary:
 - Canvas is cleaner and drag is unobstructed. KPIs live in exactly one place (Deep Dive
   overlay, on selection). No more redundant hover popups or minimap/control collision.
+
+---
+Task ID: UX-fixes-3
+Agent: Orchestrator (main)
+Task: (1) Kill the popup-on-drag by splitting select vs. inspect; (2) move thinking inline into the chat feed, Claude/Gemini style.
+
+Work Log:
+- Store: split selectedNodeId (visual highlight only) from inspectedNodeId (drives Deep Dive).
+  inspectNode(id) sets both; inspectNode(null) closes the overlay. removeNode clears both.
+  Initial state inspects CSTR-1 so the app shows real data on load, but it's dismissable.
+- ReactorCanvas: onNodeClick → selectNode (no overlay); onNodeDoubleClick → inspectNode
+  (opens Deep Dive). Added a subtle "double-click a unit to inspect" hint that only shows
+  when nothing is inspected.
+- DeepDiveOverlay: now reads inspectedNodeId; DeepDiveCard gained an onClose prop wired to
+  an X button next to the pin button. Dragging a node (single click + move) no longer opens
+  or switches the overlay.
+- Store message model restructured: CopilotMessage.role now includes "thinking"; a thinking
+  message carries steps[], done, durationMs, startedAt. Added startThinking()/pushReasoning()
+  (appends to the last active thinking message)/finalizeThinking(). Removed the separate
+  reasoning array + clearReasoning.
+- CopilotSidecar rewritten: killed the separate Reasoning Ticker panel. Thinking is now an
+  inline ThinkingBlock in the chat feed — expanded with animated "Thinking…" + streaming
+  steps while active, auto-collapses to "Thought for Xs · N steps" when done, re-expandable.
+  runPrompt uses await/setTimeout for staggered step streaming and finalizes the thinking
+  message before pushing the copilot answer.
+- Chat feed restyled modern: user messages right-aligned with a rounded bubble; copilot
+  messages left-aligned with a small "copilot" label + icon (no heavy card); thinking blocks
+  with a muted left-border; generous 4-unit spacing.
+
+Verification (Agent Browser):
+- Single-click PFR while Deep Dive shows CSTR-1 → overlay stays on CSTR-1 (no switch) ✓.
+- X close button → overlay disappears, "double-click to inspect" hint appears ✓.
+- Double-click PFR → overlay opens for PFR-2 with full KPIs (47.4% conv, τ=1.5s, k=0.428) ✓.
+- Inline thinking: "Thinking" block appears in feed while generating, streams steps, then
+  collapses to "Thought for 10.7s · 9 steps", re-expandable on click ✓.
+- Copilot answer prints below the thinking block ✓.
+- No console errors; layout still fixed (rootScrollH=900=viewportH, gapBelowFooter=0) ✓.
+
+Stage Summary:
+- Drag is now completely unobstructed — single click selects, double-click inspects, X closes.
+- Thinking lives where it belongs: inline in the conversation, not a separate panel. Modern
+  chat aesthetic with right-aligned user bubbles, left-aligned labeled copilot text, and a
+  distinct collapsible thinking block.

@@ -28,13 +28,6 @@ import {
 let idSeq = 100;
 const nextId = (p: string) => `${p}${++idSeq}`;
 
-export interface CopilotMessage {
-  id: string;
-  role: "user" | "copilot";
-  content: string;
-  ts: number;
-}
-
 export interface ReasoningStep {
   id: string;
   text: string;
@@ -42,13 +35,25 @@ export interface ReasoningStep {
   kind: "select" | "verify" | "layout" | "info";
 }
 
+export interface CopilotMessage {
+  id: string;
+  role: "user" | "copilot" | "thinking";
+  content: string;
+  ts: number;
+  // --- thinking-message fields ---
+  steps?: ReasoningStep[];
+  done?: boolean;
+  durationMs?: number;
+  startedAt?: number;
+}
+
 interface TopologyState {
   network: ReactorNetwork;
   report: SolverReport | null;
   selectedNodeId: string | null;
+  inspectedNodeId: string | null;
   pinnedNodeIds: string[];
   copilotMessages: CopilotMessage[];
-  reasoning: ReasoningStep[];
   isGenerating: boolean;
   isSolving: boolean;
 
@@ -63,12 +68,14 @@ interface TopologyState {
   connectNodes: (source: string, target: string) => void;
 
   selectNode: (id: string | null) => void;
+  inspectNode: (id: string | null) => void;
   togglePin: (id: string) => void;
   unpin: (id: string) => void;
 
   pushMessage: (m: Omit<CopilotMessage, "id" | "ts">) => void;
+  startThinking: () => string;
   pushReasoning: (text: string, kind?: ReasoningStep["kind"]) => void;
-  clearReasoning: () => void;
+  finalizeThinking: (id: string) => void;
   setGenerating: (v: boolean) => void;
 
   runSolvers: () => void;
@@ -142,6 +149,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   network: seedNetwork(),
   report: null,
   selectedNodeId: "cstr-1",
+  inspectedNodeId: "cstr-1",
   pinnedNodeIds: [],
   copilotMessages: [
     {
@@ -207,6 +215,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
         streams: s.network.streams.filter((st) => st.source !== id && st.target !== id),
       },
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+      inspectedNodeId: s.inspectedNodeId === id ? null : s.inspectedNodeId,
       pinnedNodeIds: s.pinnedNodeIds.filter((p) => p !== id),
     }));
     get().runSolvers();
@@ -233,6 +242,8 @@ export const useTopology = create<TopologyState>((set, get) => ({
   connectNodes: (source, target) => get().addStream(source, target),
 
   selectNode: (id) => set({ selectedNodeId: id }),
+  inspectNode: (id) =>
+    set(id ? { inspectedNodeId: id, selectedNodeId: id } : { inspectedNodeId: null }),
   togglePin: (id) =>
     set((s) => ({
       pinnedNodeIds: s.pinnedNodeIds.includes(id)
@@ -249,12 +260,42 @@ export const useTopology = create<TopologyState>((set, get) => ({
       ],
     })),
 
+  // --- thinking-as-message: a "thinking" message lives inline in the feed ---
+  startThinking: () => {
+    const id = nextId("m");
+    const now = Date.now();
+    set((s) => ({
+      copilotMessages: [
+        ...s.copilotMessages,
+        { id, role: "thinking", content: "", ts: now, steps: [], done: false, startedAt: now },
+      ],
+    }));
+    return id;
+  },
+
   pushReasoning: (text, kind = "info") =>
     set((s) => ({
-      reasoning: [...s.reasoning, { id: nextId("r"), text, kind, ts: Date.now() }].slice(-40),
+      copilotMessages: s.copilotMessages.map((m) => {
+        // append to the last unfinished thinking message
+        if (m.role === "thinking" && !m.done) {
+          return {
+            ...m,
+            steps: [...(m.steps ?? []), { id: nextId("r"), text, kind, ts: Date.now() }],
+          };
+        }
+        return m;
+      }),
     })),
 
-  clearReasoning: () => set({ reasoning: [] }),
+  finalizeThinking: (id) =>
+    set((s) => ({
+      copilotMessages: s.copilotMessages.map((m) =>
+        m.id === id && m.role === "thinking"
+          ? { ...m, done: true, durationMs: Date.now() - (m.startedAt ?? m.ts) }
+          : m,
+      ),
+    })),
+
   setGenerating: (v) => set({ isGenerating: v }),
 
   runSolvers: () => {

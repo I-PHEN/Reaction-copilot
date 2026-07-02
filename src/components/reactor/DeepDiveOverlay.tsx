@@ -114,10 +114,12 @@ function DeepDiveCard({
   node,
   result,
   compact = false,
+  onClose,
 }: {
   node: NetworkNode;
   result: SolverResult | undefined;
   compact?: boolean;
+  onClose?: () => void;
 }) {
   const updateNodeParams = useTopology((s) => s.updateNodeParams);
   const togglePin = useTopology((s) => s.togglePin);
@@ -152,7 +154,7 @@ function DeepDiveCard({
           </span>
           <span className="text-sm font-semibold text-zinc-100">{node.label}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => togglePin(node.id)}
             title={isPinned ? "Unpin" : "Pin for comparison"}
@@ -163,6 +165,15 @@ function DeepDiveCard({
           >
             {isPinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close"
+              className="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-700/60 hover:text-zinc-200"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -311,16 +322,17 @@ function DeepDiveCard({
 export function DeepDiveOverlay() {
   const network = useTopology((s) => s.network);
   const report = useTopology((s) => s.report);
-  const selectedNodeId = useTopology((s) => s.selectedNodeId);
+  const inspectedNodeId = useTopology((s) => s.inspectedNodeId);
   const pinnedNodeIds = useTopology((s) => s.pinnedNodeIds);
+  const inspectNode = useTopology((s) => s.inspectNode);
 
-  const selectedNode = network.nodes.find((n) => n.id === selectedNodeId);
+  const inspectedNode = network.nodes.find((n) => n.id === inspectedNodeId);
   const pinnedNodes = pinnedNodeIds
-    .filter((id) => id !== selectedNodeId)
+    .filter((id) => id !== inspectedNodeId)
     .map((id) => network.nodes.find((n) => n.id === id))
     .filter(Boolean) as NetworkNode[];
 
-  if (!selectedNode && pinnedNodes.length === 0) return null;
+  if (!inspectedNode && pinnedNodes.length === 0) return null;
 
   return (
     <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex max-w-[92%] -translate-x-1/2 flex-row items-end gap-2">
@@ -331,11 +343,15 @@ export function DeepDiveOverlay() {
         </div>
       ))}
 
-      {/* selected node — full card */}
-      {selectedNode && (
+      {/* inspected node — full card */}
+      {inspectedNode && (
         <div className="pointer-events-auto max-h-[78vh]">
           <ScrollArea className="eng-scroll max-h-[78vh]">
-            <DeepDiveCard node={selectedNode} result={report?.results[selectedNode.id]} />
+            <DeepDiveCard
+              node={inspectedNode}
+              result={report?.results[inspectedNode.id]}
+              onClose={() => inspectNode(null)}
+            />
           </ScrollArea>
         </div>
       )}
