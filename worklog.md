@@ -313,3 +313,38 @@ Verification (Agent Browser):
 Stage Summary:
 - Equipment now reads as apparatus on a flowsheet, not icons-in-cards. Double-click reliably
   opens the Deep Dive config panel. Selection is a shape-following glow, never a rectangle.
+
+---
+Task ID: UX-fixes-6
+Agent: Orchestrator (main)
+Task: Fix hydration mismatch, add resizable chat area, bigger equipment, snappier zoom.
+
+Work Log:
+- HYDRATION FIX: root cause was the seed copilot message using ts: Date.now() in the store
+  initializer — evaluated once on the server (SSR time) and again on the client (hydration
+  time), producing different locale-formatted time strings. Two fixes: (1) seed message ts
+  set to 0; (2) Timestamp component renders nothing on SSR and only formats time after client
+  mount, using useSyncExternalStore (lint-compliant mount detection — server snapshot returns
+  false, client snapshot returns true). No more "12:09 AM vs 12:13 AM" mismatch.
+- RESIZABLE CHAT: wrapped canvas + sidecar in ResizablePanelGroup (react-resizable-panels /
+  shadcn resizable). Canvas panel defaultSize=70% minSize=40%; sidecar defaultSize=30%
+  minSize=18% maxSize=55%. ResizableHandle with grip, hover/drag states in cyan. Verified
+  bidirectional drag (sidecar 588px → 338px → ... both directions work).
+- BIGGER EQUIPMENT: scaled NODE_SIZE ~1.6× (CSTR 110→176w / 104→166h, PFR 130→208w /
+  66→106h, separator 84→134w / 128→205h, feed/product 110→176w / 56→90h, mixer 96→154w /
+  76→122h). SVG viewBox scales to fill. Re-spaced seed network positions (x: 40/460/900/1340)
+  to avoid overlap at the larger sizes.
+- SNAPPIER ZOOM: added keyboard shortcuts via useReactFlow — Ctrl/Cmd+= zoom in, Ctrl/Cmd+-
+  zoom out, Ctrl/Cmd+0 fit view (200–300ms animated). Bumped maxZoom 2→4 and minZoom
+  0.3→0.2 so you can zoom deep into the large equipment detail. Scroll-wheel zoom retained.
+
+Verification (Agent Browser):
+- Hydration: fresh reload produces zero console errors / zero hydration mismatches ✓.
+- Resizable: drag handle moves bidirectionally, sidecar width changes (431→588→338px) ✓.
+- Keyboard zoom: scale 0.5467 → 0.7873 (Ctrl+=), → 0.5962 (Ctrl+0 fit) ✓.
+- Bigger equipment: CSTR SVG now 90×96px (was ~56px) ✓.
+- Double-click inspect still works with bigger nodes (CSTR-1 Deep Dive opens) ✓.
+
+Stage Summary:
+- Hydration error eliminated. Chat area is freely resizable (drag the divider). Equipment is
+  substantially larger and more detailed. Zoom is snappy via keyboard + wider zoom range.

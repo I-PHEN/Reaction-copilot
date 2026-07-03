@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ReactorCanvas } from "@/components/reactor/ReactorCanvas";
 import { CopilotSidecar } from "@/components/reactor/CopilotSidecar";
 import { DeepDiveOverlay } from "@/components/reactor/DeepDiveOverlay";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useTopology } from "@/lib/store/topology";
 import { Network, ShieldCheck, AlertTriangle, FileJson } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -127,16 +128,26 @@ export default function Page() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100 lg:h-dvh lg:overflow-hidden">
       <Header />
-      <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Workspace Canvas */}
-        <section className="relative h-[52vh] shrink-0 overflow-hidden lg:h-auto lg:min-h-0 lg:flex-1 lg:overflow-visible">
-          <ReactorCanvas />
-          <DeepDiveOverlay />
-        </section>
-        {/* Copilot Sidecar */}
-        <aside className="flex min-h-0 flex-1 flex-col border-t border-zinc-800/80 lg:w-[340px] lg:shrink-0 lg:border-l lg:border-t-0">
-          <CopilotSidecar />
-        </aside>
+      <main className="min-h-0 flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Workspace Canvas */}
+          <ResizablePanel defaultSize={70} minSize={40}>
+            <section className="relative h-full overflow-hidden">
+              <ReactorCanvas />
+              <DeepDiveOverlay />
+            </section>
+          </ResizablePanel>
+          <ResizableHandle
+            withHandle
+            className="bg-zinc-800/80 data-[resize-handle-state=hover]:bg-zinc-700 data-[resize-handle-state=drag]:bg-cyan-600/60 transition-colors"
+          />
+          {/* Copilot Sidecar */}
+          <ResizablePanel defaultSize={30} minSize={18} maxSize={55}>
+            <aside className="h-full border-l border-zinc-800/80">
+              <CopilotSidecar />
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </main>
       <ReconcilerBar />
     </div>

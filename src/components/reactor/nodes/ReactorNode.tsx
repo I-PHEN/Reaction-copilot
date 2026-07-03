@@ -19,14 +19,14 @@ const STATUS_DOT: Record<SolverResult["status"], string> = {
   error: "bg-red-500",
 };
 
-/** Dimensions per equipment type (the separator is tall). */
+/** Dimensions per equipment type — large, detailed illustrations. */
 const NODE_SIZE: Record<NodeType, { w: number; glyphH: number }> = {
-  feed: { w: 110, glyphH: 56 },
-  cstr: { w: 110, glyphH: 104 },
-  pfr: { w: 130, glyphH: 66 },
-  mixer: { w: 96, glyphH: 76 },
-  separator: { w: 84, glyphH: 128 },
-  product: { w: 110, glyphH: 56 },
+  feed: { w: 176, glyphH: 90 },
+  cstr: { w: 176, glyphH: 166 },
+  pfr: { w: 208, glyphH: 106 },
+  mixer: { w: 154, glyphH: 122 },
+  separator: { w: 134, glyphH: 205 },
+  product: { w: 176, glyphH: 90 },
 };
 
 function ReactorNodeImpl({ id, data, selected }: NodeProps) {

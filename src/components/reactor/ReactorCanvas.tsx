@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -8,6 +8,7 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeChange,
@@ -86,6 +87,28 @@ function CanvasInner() {
   const removeNode = useTopology((s) => s.removeNode);
   const connectNodes = useTopology((s) => s.connectNodes);
   const removeStream = useTopology((s) => s.removeStream);
+  const reactFlow = useReactFlow();
+
+  // Keyboard zoom: Ctrl/Cmd + = zoom in, Ctrl/Cmd + - zoom out, Ctrl/Cmd 0 = fit.
+  // Snappier than the scroll-wheel for precise control.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        reactFlow.zoomIn({ duration: 200 });
+      } else if (e.key === "-") {
+        e.preventDefault();
+        reactFlow.zoomOut({ duration: 200 });
+      } else if (e.key === "0") {
+        e.preventDefault();
+        reactFlow.fitView({ duration: 300, padding: 0.25 });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reactFlow]);
 
   const nodes = useMemo<Node<ReactorNodeData>[]>(
     () =>
@@ -165,8 +188,8 @@ function CanvasInner() {
         zoomOnDoubleClick={false}
         fitView
         fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
-        minZoom={0.3}
-        maxZoom={2}
+        minZoom={0.2}
+        maxZoom={4}
         defaultEdgeOptions={{ type: "stream" }}
         connectionLineStyle={{ stroke: "#22d3ee", strokeWidth: 2 }}
       >

@@ -87,14 +87,14 @@ const seedNetwork = (): ReactorNetwork => {
     id: "feed-1",
     type: "feed",
     label: "Feed",
-    position: { x: 40, y: 220 },
+    position: { x: 40, y: 260 },
     params: { feedRate: 10, inletConcentration: 5, volumetricFlow: 2, temperature: 350 },
   };
   const cstr: NetworkNode = {
     id: "cstr-1",
     type: "cstr",
     label: "CSTR-1",
-    position: { x: 360, y: 220 },
+    position: { x: 460, y: 260 },
     params: {
       volume: 2.0,
       temperature: 350,
@@ -106,7 +106,7 @@ const seedNetwork = (): ReactorNetwork => {
     id: "pfr-1",
     type: "pfr",
     label: "PFR-2",
-    position: { x: 700, y: 220 },
+    position: { x: 900, y: 260 },
     params: {
       volume: 3.0,
       temperature: 360,
@@ -118,7 +118,7 @@ const seedNetwork = (): ReactorNetwork => {
     id: "product-1",
     type: "product",
     label: "Product",
-    position: { x: 1040, y: 220 },
+    position: { x: 1340, y: 260 },
     params: { temperature: 360 },
   };
   const streams: Stream[] = [
@@ -157,7 +157,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
       role: "copilot",
       content:
         "Reactor Synthesis Copilot online. I generate verified flowsheets grounded in first-order Arrhenius kinetics. Try: \u201cDesign a 2-stage CSTR + PFR train for 90% conversion\u201d, or use a Quick Action.",
-      ts: Date.now(),
+      ts: 0,
     },
   ],
   reasoning: [],

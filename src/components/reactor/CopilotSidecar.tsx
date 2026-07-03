@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Send,
   Sparkles,
@@ -41,6 +41,25 @@ interface CopilotResponse {
 function fmtTime(ts: number) {
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Renders a timestamp only after client mount. SSR renders nothing, so
+ * server/client never disagree on locale-formatted time (hydration-safe).
+ * useSyncExternalStore is the lint-compliant way to detect client mount.
+ */
+const emptySubscribe = () => () => {};
+function useIsClient() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true, // client snapshot
+    () => false, // server snapshot
+  );
+}
+function Timestamp({ ts }: { ts: number }) {
+  const mounted = useIsClient();
+  if (!mounted || ts === 0) return null;
+  return <>{fmtTime(ts)}</>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -364,7 +383,7 @@ export function CopilotSidecar() {
                         {m.content}
                       </div>
                       <span className="mt-0.5 px-1 text-[9px] text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
-                        {fmtTime(m.ts)}
+                        <Timestamp ts={m.ts} />
                       </span>
                     </div>
                   </div>
@@ -381,7 +400,7 @@ export function CopilotSidecar() {
                     </div>
                     <CopilotBody content={m.content} />
                     <span className="mt-0.5 px-1 text-[9px] text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
-                      {fmtTime(m.ts)}
+                      <Timestamp ts={m.ts} />
                     </span>
                   </div>
                 </div>
