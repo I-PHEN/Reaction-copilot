@@ -13,26 +13,20 @@ export interface ReactorNodeData {
   flowRate?: number;
 }
 
-const STATUS_RING: Record<SolverResult["status"], string> = {
-  nominal: "ring-zinc-700/60",
-  warning: "ring-amber-500/50",
-  error: "ring-red-500/60",
-};
-
 const STATUS_DOT: Record<SolverResult["status"], string> = {
   nominal: "bg-emerald-500",
   warning: "bg-amber-500",
   error: "bg-red-500",
 };
 
-/** Card dimensions per equipment type (the separator is tall). */
-const CARD_SIZE: Record<NodeType, { w: number; glyphH: number }> = {
-  feed: { w: 158, glyphH: 56 },
-  cstr: { w: 158, glyphH: 104 },
-  pfr: { w: 178, glyphH: 66 },
-  mixer: { w: 140, glyphH: 76 },
-  separator: { w: 120, glyphH: 128 },
-  product: { w: 158, glyphH: 56 },
+/** Dimensions per equipment type (the separator is tall). */
+const NODE_SIZE: Record<NodeType, { w: number; glyphH: number }> = {
+  feed: { w: 110, glyphH: 56 },
+  cstr: { w: 110, glyphH: 104 },
+  pfr: { w: 130, glyphH: 66 },
+  mixer: { w: 96, glyphH: 76 },
+  separator: { w: 84, glyphH: 128 },
+  product: { w: 110, glyphH: 56 },
 };
 
 function ReactorNodeImpl({ id, data, selected }: NodeProps) {
@@ -40,7 +34,7 @@ function ReactorNodeImpl({ id, data, selected }: NodeProps) {
   const Glyph = GLYPHS[nodeData.type];
   const result = nodeData.result;
   const status = result?.status ?? "nominal";
-  const size = CARD_SIZE[nodeData.type];
+  const size = NODE_SIZE[nodeData.type];
 
   // Handles are type-aware so connections stay physically meaningful.
   const isFeed = nodeData.type === "feed";
@@ -51,39 +45,43 @@ function ReactorNodeImpl({ id, data, selected }: NodeProps) {
     <div
       style={{ width: size.w }}
       className={cn(
-        "group relative flex flex-col items-center rounded-md bg-zinc-900/85 p-2 backdrop-blur-sm ring-1 ring-inset transition-shadow",
-        STATUS_RING[status],
-        selected && "ring-2 ring-cyan-400/80 shadow-[0_0_0_1px_rgba(34,211,238,0.45)]",
+        // No card, no background, no border — equipment floats on the canvas,
+        // Aspen-style. A transparent wrapper only anchors the handles.
+        "group relative flex flex-col items-center transition-[filter] duration-150",
+        // Selection = soft cyan glow that follows the equipment's actual shape,
+        // not a rectangle.
+        selected && "[filter:drop-shadow(0_0_6px_rgba(34,211,238,0.55))]",
       )}
     >
       {!isFeed && (
-        <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-zinc-500" />
+        <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-zinc-600" />
       )}
 
-      {/* label row */}
-      <div className="mb-1 flex w-full items-center justify-between px-0.5">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500">
-          {nodeData.type}
-        </span>
-        <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
-      </div>
-
-      {/* equipment illustration */}
+      {/* equipment illustration — sits directly on the canvas */}
       <div style={{ height: size.glyphH }} className="w-full">
         <Glyph id={id} />
       </div>
 
-      <div className="mt-1 text-center text-[11px] font-medium text-zinc-200">
-        {nodeData.label}
+      {/* label + status dot — plain text, no background */}
+      <div className="mt-1 flex items-center gap-1">
+        <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
+        <span
+          className={cn(
+            "text-[11px] font-medium whitespace-nowrap transition-colors",
+            selected ? "text-cyan-300" : "text-zinc-300",
+          )}
+        >
+          {nodeData.label}
+        </span>
       </div>
 
       {!isProduct && !isSeparator && (
-        <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-zinc-500" />
+        <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-zinc-600" />
       )}
       {isSeparator && (
         <>
-          <Handle type="source" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-zinc-500" id="vapor" />
-          <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-zinc-500" id="bottoms" />
+          <Handle type="source" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-zinc-600" id="vapor" />
+          <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-zinc-600" id="bottoms" />
         </>
       )}
     </div>

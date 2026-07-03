@@ -281,3 +281,35 @@ Stage Summary:
 - The chat area is now a modern, fixed-layout transcript: the composer never moves, the feed
   scrolls internally, thinking streams inline, responses render as markdown, you can stop
   mid-generation, and you get a jump-to-latest affordance when reading history.
+
+---
+Task ID: UX-fixes-5
+Agent: Orchestrator (main)
+Task: Remove the card rectangle wrapping equipment (Aspen-style floating units) + fix double-click zooming instead of inspecting.
+
+Work Log:
+- ReactorNode: stripped the card entirely — removed bg-zinc-900/85, ring-1 ring-inset,
+  rounded-md, p-2, backdrop-blur-sm. The wrapper is now a transparent div that only anchors
+  the handles; the equipment SVG floats directly on the dark canvas, Aspen-style.
+- Selection indicator: replaced the rectangular ring with a cyan drop-shadow glow
+  ([filter:drop-shadow(0_0_6px_rgba(34,211,238,0.55))]) that follows the equipment's actual
+  shape, plus the label text goes cyan. No rectangle at any state.
+- Status: the ring-per-status is gone; the status dot now sits inline next to the label
+  (emerald/amber/red). Equipment bodies stay neutral metallic at all times.
+- Tightened node widths (feed/cstr/product 110, pfr 130, mixer 96, separator 84) since the
+  card padding no longer pads them out — equipment sits tighter on the grid.
+- ReactorCanvas: added zoomOnDoubleClick={false} to ReactFlow. This was the root cause of
+  double-click zooming instead of inspecting — React Flow's default zoomOnDoubleClick=true
+  intercepted the gesture before onNodeDoubleClick could fire.
+
+Verification (Agent Browser):
+- Node wrapper: backgroundColor rgba(0,0,0,0), boxShadow none, border 0 — no rectangle ✓.
+- Double-click PFR: zoom scale identical before/after (0.518919 → 0.518919), Deep Dive
+  opened for PFR-2 ✓.
+- Single-click selection: filter = drop-shadow(cyan 6px), no box-shadow, transparent bg,
+  label text cyan ✓.
+- No console errors; dev log clean ✓.
+
+Stage Summary:
+- Equipment now reads as apparatus on a flowsheet, not icons-in-cards. Double-click reliably
+  opens the Deep Dive config panel. Selection is a shape-following glow, never a rectangle.

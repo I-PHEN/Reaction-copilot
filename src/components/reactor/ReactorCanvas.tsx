@@ -162,6 +162,7 @@ function CanvasInner() {
         onConnect={onConnect}
         onNodeClick={(_, n) => selectNode(n.id)}
         onNodeDoubleClick={onNodeDoubleClick}
+        zoomOnDoubleClick={false}
         fitView
         fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
         minZoom={0.3}
