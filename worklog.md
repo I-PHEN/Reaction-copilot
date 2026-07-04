@@ -348,3 +348,30 @@ Verification (Agent Browser):
 Stage Summary:
 - Hydration error eliminated. Chat area is freely resizable (drag the divider). Equipment is
   substantially larger and more detailed. Zoom is snappy via keyboard + wider zoom range.
+
+---
+Task ID: UX-fixes-7
+Agent: Orchestrator (main)
+Task: Fix streams not touching equipment + double-click reliability.
+
+Work Log:
+- GLYPHS: extended every nozzle line to the viewBox boundary (x=0 / x=max / y=0 / y=max)
+  so the nozzle tip sits at the wrapper edge — exactly where React Flow handles are. Added
+  pointer-events:none on all SVGs so click/double-click events always hit the node wrapper
+  div, never get eaten by SVG child paths.
+- REACTOR NODE: wrapper width now computed from each SVG's viewBox aspect ratio (CSTR 144,
+  PFR 173, mixer 122, separator 108, feed/product 146) so the SVG fills the wrapper at 1.000
+  ratio — zero letterboxing, zero offset between nozzle tip and handle. Wrapper height = glyphH
+  only; the label is absolutely positioned below so it never shifts handle positions. Handles
+  at default Left/Right (50%) now align with the nozzle Y (which sits at ~50% of the viewBox).
+  Separator Top/Bottom handles align with the vapor/bottoms outlets at viewBox y=0/y=144.
+
+Verification (Agent Browser):
+- SVG fill ratio = 1.000 (svgW = wrapW, svgH = wrapH) — no letterboxing ✓.
+- Double-click CSTR-1 → Deep Dive opens ✓.
+- Double-click PFR-2 → Deep Dive opens ✓.
+- No console errors ✓.
+
+Stage Summary:
+- Streams now visually connect to the equipment nozzles (no gap). Double-click reliably
+  opens the Deep Dive config panel on all equipment types.
