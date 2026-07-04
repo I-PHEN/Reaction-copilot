@@ -82,6 +82,13 @@ interface TopologyState {
 
   runSolvers: () => void;
   serialize: () => ReactorNetwork;
+
+  // --- session management ---
+  clearSession: () => void;
+  saveTopology: (name: string) => void;
+  loadTopology: (name: string) => boolean;
+  deleteSavedTopology: (name: string) => void;
+  savedTopologies: { name: string; ts: number; nodes: number }[];
 }
 
 const seedNetwork = (): ReactorNetwork => {
@@ -157,6 +164,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   reasoning: [],
   isGenerating: false,
   isSolving: false,
+  savedTopologies: loadSavedList(),
 
   setNetwork: (n) => {
     set({ network: n, selectedNodeId: n.nodes[0]?.id ?? null });
@@ -330,7 +338,96 @@ export const useTopology = create<TopologyState>((set, get) => ({
     const n = get().network;
     return JSON.parse(JSON.stringify(n)) as ReactorNetwork;
   },
+
+  // --- session management ---
+  clearSession: () => {
+    set({
+      network: seedNetwork(),
+      report: null,
+      selectedNodeId: "cstr-1",
+      inspectedNodeId: "cstr-1",
+      pinnedNodeIds: [],
+      copilotMessages: [],
+      reasoning: [],
+      isGenerating: false,
+    });
+    queueMicrotask(() => get().runSolvers());
+  },
+
+  saveTopology: (name) => {
+    if (typeof window === "undefined") return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const entry = {
+      name: trimmed,
+      ts: Date.now(),
+      network: JSON.parse(JSON.stringify(get().network)) as ReactorNetwork,
+    };
+    const all = readStorage();
+    const filtered = all.filter((e) => e.name !== trimmed);
+    filtered.push(entry);
+    writeStorage(filtered);
+    set({ savedTopologies: loadSavedList() });
+  },
+
+  loadTopology: (name) => {
+    if (typeof window === "undefined") return false;
+    const all = readStorage();
+    const entry = all.find((e) => e.name === name.trim());
+    if (!entry) return false;
+    const network = JSON.parse(JSON.stringify(entry.network)) as ReactorNetwork;
+    set({
+      network,
+      report: null,
+      selectedNodeId: network.nodes[0]?.id ?? null,
+      inspectedNodeId: network.nodes[0]?.id ?? null,
+      pinnedNodeIds: [],
+    });
+    queueMicrotask(() => get().runSolvers());
+    return true;
+  },
+
+  deleteSavedTopology: (name) => {
+    if (typeof window === "undefined") return;
+    const all = readStorage();
+    writeStorage(all.filter((e) => e.name !== name.trim()));
+    set({ savedTopologies: loadSavedList() });
+  },
 }));
+
+// --- localStorage helpers for the topology library ---
+const STORAGE_KEY = "reactor-topologies";
+
+type StoredEntry = { name: string; ts: number; network: ReactorNetwork };
+
+function readStorage(): StoredEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is StoredEntry =>
+        e && typeof e.name === "string" && typeof e.ts === "number" && e.network,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeStorage(entries: StoredEntry[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    // storage full or unavailable — silently ignore
+  }
+}
+
+function loadSavedList(): { name: string; ts: number; nodes: number }[] {
+  return readStorage().map((e) => ({ name: e.name, ts: e.ts, nodes: e.network.nodes.length }));
+}
 
 /** Run solvers once on first load so the UI has a report immediately. */
 if (typeof window !== "undefined") {

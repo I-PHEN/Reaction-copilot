@@ -489,3 +489,43 @@ Stage Summary:
 - Canvas now has full desktop interaction: single-click selects, double-click inspects,
   right-click opens a context menu (Inspect/Duplicate/Pin/Delete), Delete key removes the
   selected node (guarded against the chat composer). Duplicate clones equipment with params.
+
+---
+Task ID: UX-fixes-11 (Session management, plan C)
+Agent: Orchestrator (main)
+Task: New session button + topology library (save/load/delete) with localStorage persistence.
+
+Work Log:
+- Store: added session-management actions:
+  - clearSession() — resets network to seed, clears chat/reasoning/pins/selection, runs solvers.
+  - saveTopology(name) — deep-clones the current network into localStorage under a name.
+  - loadTopology(name) — restores a saved network, resets selection/inspection, runs solvers.
+  - deleteSavedTopology(name) — removes an entry from localStorage.
+  - savedTopologies: array of {name, ts, nodes} for the library list.
+- localStorage helpers (readStorage/writeStorage/loadSavedList) with try/catch guards for
+  SSR safety and storage-unavailable environments. Key: "reactor-topologies".
+- Header rewrite: three controls on the right:
+  - "New" button (Plus icon) — clears session, toast confirms.
+  - "Library" dropdown (Library icon) — Save current topology… / separator / list of saved
+    entries (each with FolderOpen icon, name, node count "Nu", and a hover-reveal delete
+    button). Empty state shows "No saved topologies yet".
+  - "Export" button (existing) — downloads JSON.
+- Save dialog (shadcn Dialog): text input with placeholder, Enter to submit, Cancel/Save
+  buttons. Cyan primary button matches app accent. Toast confirms on save.
+- All actions give toast feedback (sonner): "New session", "Topology saved", "Topology
+  loaded", "Deleted".
+
+Verification (Agent Browser):
+- Save: opened Library → Save current topology → dialog → typed "Test Cascade" → Save →
+  localStorage has 1 entry with full network JSON ✓.
+- New session: pushed a test message → clicked New → chat cleared (1→0), canvas reset to
+  seed (4 nodes) ✓.
+- Load: deleted CSTR-1 (4→3 nodes) → opened Library → clicked "Test Cascade 4u" → nodes
+  restored to 4 (Feed, CSTR-1, PFR-2, Product) with all streams ✓.
+- Delete: deleteSavedTopology('Test Cascade') → localStorage 1→0, savedTopologies 1→0 ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- Full session management: start fresh (New), persist topologies to localStorage (Library →
+  Save), restore them anytime (Library → click entry), and remove unwanted saves (hover
+  delete). All with toast feedback. Topologies survive page reloads and browser restarts.
