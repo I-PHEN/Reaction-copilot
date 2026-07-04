@@ -20,14 +20,22 @@ import "@xyflow/react/dist/style.css";
 import { ReactorNode, type ReactorNodeData } from "./nodes/ReactorNode";
 import { StreamEdge } from "./StreamEdge";
 import { useTopology } from "@/lib/store/topology";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Inspect, Copy, Pin, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import type { NodeType } from "@/lib/solvers";
 
 const nodeTypes = { reactor: ReactorNode };
 const edgeTypes = { stream: StreamEdge };
 
-const UNIT_OPTIONS: { type: ReactorNodeData["type"]; desc: string }[] = [
+const UNIT_OPTIONS: { type: NodeType; desc: string }[] = [
   { type: "feed", desc: "Inlet stream source" },
   { type: "cstr", desc: "Continuous stirred tank" },
   { type: "pfr", desc: "Plug-flow reactor" },
@@ -85,30 +93,39 @@ function CanvasInner() {
   const selectNode = useTopology((s) => s.selectNode);
   const updateNodePosition = useTopology((s) => s.updateNodePosition);
   const removeNode = useTopology((s) => s.removeNode);
+  const duplicateNode = useTopology((s) => s.duplicateNode);
   const connectNodes = useTopology((s) => s.connectNodes);
   const removeStream = useTopology((s) => s.removeStream);
+  const inspectNode = useTopology((s) => s.inspectNode);
+  const togglePin = useTopology((s) => s.togglePin);
   const reactFlow = useReactFlow();
 
-  // Keyboard zoom: Ctrl/Cmd + = zoom in, Ctrl/Cmd + - zoom out, Ctrl/Cmd 0 = fit.
-  // Snappier than the scroll-wheel for precise control.
+  // Keyboard zoom: Ctrl/Cmd + = / - / 0
+  // Keyboard delete: Delete / Backspace removes the selected node.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't intercept when typing in the chat composer or any input.
+      if (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable) return;
+
       const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
-      if (e.key === "=" || e.key === "+") {
+      if (mod && (e.key === "=" || e.key === "+")) {
         e.preventDefault();
         reactFlow.zoomIn({ duration: 200 });
-      } else if (e.key === "-") {
+      } else if (mod && e.key === "-") {
         e.preventDefault();
         reactFlow.zoomOut({ duration: 200 });
-      } else if (e.key === "0") {
+      } else if (mod && e.key === "0") {
         e.preventDefault();
         reactFlow.fitView({ duration: 300, padding: 0.25 });
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId) {
+        e.preventDefault();
+        removeNode(selectedNodeId);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [reactFlow]);
+  }, [reactFlow, selectedNodeId, removeNode]);
 
   const nodes = useMemo<Node<ReactorNodeData>[]>(
     () =>
@@ -167,7 +184,6 @@ function CanvasInner() {
     [connectNodes],
   );
 
-  const inspectNode = useTopology((s) => s.inspectNode);
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, n: Node) => inspectNode(n.id),
     [inspectNode],
@@ -175,54 +191,95 @@ function CanvasInner() {
 
   return (
     <div className="reactor-canvas relative h-full w-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={(_, n) => selectNode(n.id)}
-        onNodeDoubleClick={onNodeDoubleClick}
-        zoomOnDoubleClick={false}
-        fitView
-        fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
-        minZoom={0.2}
-        maxZoom={4}
-        defaultEdgeOptions={{ type: "stream" }}
-        connectionLineStyle={{ stroke: "#22d3ee", strokeWidth: 2 }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1a1a1d" />
-        <Controls
-          className="!bottom-3 !right-3 !rounded-md !overflow-hidden !border !border-zinc-800"
-          showInteractive={false}
-        />
+      <ContextMenu>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={(_, n) => selectNode(n.id)}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeContextMenu={(e, n) => {
+            e.preventDefault();
+            selectNode(n.id);
+          }}
+          zoomOnDoubleClick={false}
+          deleteKeyCode={null}
+          fitView
+          fitViewOptions={{ padding: 0.25, maxZoom: 1.1 }}
+          minZoom={0.2}
+          maxZoom={4}
+          defaultEdgeOptions={{ type: "stream" }}
+          connectionLineStyle={{ stroke: "#22d3ee", strokeWidth: 2 }}
+          style={{ cursor: "default" }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1a1a1d" />
+          <Controls
+            className="!bottom-3 !right-3 !rounded-md !overflow-hidden !border !border-zinc-800"
+            showInteractive={false}
+          />
 
-        {/* Single top-right control cluster: add-unit + delete */}
-        <Panel position="top-right" className="!m-3">
-          <div className="flex items-center gap-1.5">
-            <AddUnitButton />
-            <button
-              onClick={() => selectedNodeId && removeNode(selectedNodeId)}
-              disabled={!selectedNodeId}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700/60 bg-zinc-900/80 text-zinc-300 backdrop-blur transition-colors hover:border-red-500/40 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
-              title="Delete selected unit"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </Panel>
-
-        {/* Subtle discoverability hint — only when nothing is inspected */}
-        {!inspectedNodeId && (
-          <Panel position="top-left" className="!m-3">
-            <div className="rounded-md border border-zinc-800/60 bg-zinc-900/70 px-2.5 py-1 font-mono text-[10px] text-zinc-600 backdrop-blur">
-              double-click a unit to inspect
+          {/* Single top-right control cluster: add-unit + delete */}
+          <Panel position="top-right" className="!m-3">
+            <div className="flex items-center gap-1.5">
+              <AddUnitButton />
+              <button
+                onClick={() => selectedNodeId && removeNode(selectedNodeId)}
+                disabled={!selectedNodeId}
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700/60 bg-zinc-900/80 text-zinc-300 backdrop-blur transition-colors hover:border-red-500/40 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
+                title="Delete selected unit"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           </Panel>
-        )}
-      </ReactFlow>
+
+          {/* Subtle discoverability hint — only when nothing is inspected */}
+          {!inspectedNodeId && (
+            <Panel position="top-left" className="!m-3">
+              <div className="rounded-md border border-zinc-800/60 bg-zinc-900/70 px-2.5 py-1 font-mono text-[10px] text-zinc-600 backdrop-blur">
+                double-click a unit to inspect · right-click for options
+              </div>
+            </Panel>
+          )}
+        </ReactFlow>
+
+        {/* Right-click context menu content — appears when a node is
+            right-clicked (Radix triggers on any right-click inside the
+            ContextMenu root; we guard actions on selectedNodeId). */}
+        <ContextMenuContent className="w-44 border-zinc-700 bg-zinc-900 p-1 text-zinc-200">
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && inspectNode(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] focus:bg-zinc-800"
+          >
+            <Inspect className="h-3.5 w-3.5 text-cyan-400" /> Inspect
+            <span className="ml-auto font-mono text-[9px] text-zinc-600">dbl-click</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && duplicateNode(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] focus:bg-zinc-800"
+          >
+            <Copy className="h-3.5 w-3.5 text-zinc-400" /> Duplicate
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && togglePin(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] focus:bg-zinc-800"
+          >
+            <Pin className="h-3.5 w-3.5 text-cyan-400" /> Pin for comparison
+          </ContextMenuItem>
+          <ContextMenuSeparator className="my-1 bg-zinc-800" />
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && removeNode(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] text-red-300 focus:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+            <span className="ml-auto font-mono text-[9px] text-zinc-600">Del</span>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   );
 }

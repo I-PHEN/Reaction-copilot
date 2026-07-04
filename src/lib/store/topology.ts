@@ -62,6 +62,7 @@ interface TopologyState {
   updateNodeParams: (id: string, params: Partial<NetworkNode["params"]>) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => void;
   addNode: (type: NodeType, position?: { x: number; y: number }) => string;
+  duplicateNode: (id: string) => string;
   removeNode: (id: string) => void;
   addStream: (source: string, target: string) => void;
   removeStream: (id: string) => void;
@@ -200,6 +201,23 @@ export const useTopology = create<TopologyState>((set, get) => ({
     return id;
   },
 
+  duplicateNode: (id) => {
+    const src = get().network.nodes.find((n) => n.id === id);
+    if (!src) return id;
+    const newId = nextId(src.type.slice(0, 1));
+    const count = get().network.nodes.filter((n) => n.type === src.type).length;
+    const node: NetworkNode = {
+      id: newId,
+      type: src.type,
+      label: labelFor(src.type, count),
+      position: { x: src.position.x + 60, y: src.position.y + 60 },
+      params: { ...src.params },
+    };
+    set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] } }));
+    get().runSolvers();
+    return newId;
+  },
+
   removeNode: (id) => {
     set((s) => ({
       network: {
@@ -317,4 +335,6 @@ export const useTopology = create<TopologyState>((set, get) => ({
 /** Run solvers once on first load so the UI has a report immediately. */
 if (typeof window !== "undefined") {
   queueMicrotask(() => useTopology.getState().runSolvers());
+  // Expose store for debugging / automated verification only.
+  (window as unknown as { __topology?: typeof useTopology }).__topology = useTopology;
 }

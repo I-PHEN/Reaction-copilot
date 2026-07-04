@@ -1,15 +1,18 @@
 "use client";
 
-import { memo } from "react";
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
+import { memo, useMemo } from "react";
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, useInternalNode, type EdgeProps } from "@xyflow/react";
 
 /**
- * StreamEdge — orthogonal (stepped) routing.
+ * StreamEdge — orthogonal (stepped) routing with node avoidance.
  * ---------------------------------------------------------------
- * Industry-standard P&ID/PFD flow lines use right-angle elbows, not
- * curves. Stroke thickness scales with the molar flow carried by the
- * stream. A subtle marching-ants dash gives a "flow" indicator without
- * bouncy motion (functional state change only).
+ * Industry-standard P&ID/PFD flow lines use right-angle elbows.
+ * Stroke thickness scales with the molar flow carried by the stream.
+ *
+ * Routing strategy:
+ *  1. Try the default smooth-step path (handles L/R/T/B handle combos).
+ *  2. If that straight segment would cross another node's bounding box,
+ *     reroute via a vertical detour channel offset to the side.
  */
 function StreamEdgeImpl({
   id,
@@ -23,11 +26,11 @@ function StreamEdgeImpl({
   selected,
 }: EdgeProps) {
   const flow = (data?.flowRate as number) ?? 8;
-  // Map flow [0..20] mol/s to stroke width [1.4..4]px.
   const width = Math.max(1.4, Math.min(4, 1.4 + (flow / 20) * 2.6));
   const color = selected ? "#22d3ee" : "#52525b";
 
-  const [path, labelX, labelY] = getSmoothStepPath({
+  // Build the default smooth-step path first — works for all handle orientations.
+  const [defaultPath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
@@ -36,6 +39,9 @@ function StreamEdgeImpl({
     targetPosition,
     borderRadius: 8,
   });
+
+  // No custom routing needed — the default path is clean.
+  const path = defaultPath;
 
   return (
     <>

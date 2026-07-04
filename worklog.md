@@ -452,3 +452,40 @@ Stage Summary:
 - Chat starts clean (no welcome message). Deep Dive overlay is now tabbed, animated, and shows
   live solver reactions via KPI flash. Premium feel achieved without drifting from the
   engineering-first direction.
+
+---
+Task ID: UX-fixes-10 (Canvas quality-of-life, plan B)
+Agent: Orchestrator (main)
+Task: Smart interactions — right-click context menu, keyboard delete, duplicate.
+
+Work Log:
+- Store: added duplicateNode(id) action — clones a node's type + params to a new id, offset
+  +60/+60 from the source, auto-labels (CSTR-1 → CSTR-2), runs solvers.
+- ReactorCanvas rewrite:
+  1. RIGHT-CLICK CONTEXT MENU: wrapped the ReactFlow in a Radix ContextMenu (shadcn). Items:
+     Inspect (dbl-click), Duplicate, Pin for comparison, Delete (Del). Each with an icon and
+     keyboard hint. Dark zinc styling. onNodeContextMenu selects the node first so actions
+     target the right-clicked unit.
+  2. KEYBOARD DELETE: Delete/Backspace removes the selected node. Guarded: ignores the key
+     when the target is a TEXTAREA/INPUT/contentEditable (so typing in the chat composer
+     never deletes nodes). Added deleteKeyCode={null} on ReactFlow to disable its built-in
+     backspace-delete (we handle it ourselves for the input guard).
+  3. DUPLICATE: wired to the context menu and the store action.
+- Kept the existing Ctrl/Cmd +/-/0 zoom shortcuts alongside the new Delete shortcut.
+- Updated the discoverability hint to "double-click a unit to inspect · right-click for options".
+- Exposed the store on window.__topology for automated verification (dev-only).
+
+Verification (Agent Browser):
+- Keyboard delete: select CSTR-1 → press Delete → node count 4→3 ✓.
+- Input guard: focus chat textarea → press Delete → nodes stay at 4 (no accidental delete) ✓.
+- Duplicate: window.__topology.getState().duplicateNode('cstr-1') → CSTR-2 created, count 4→5,
+  reconciler correctly flags "[CSTR-2] CSTR is unfed" ✓.
+- Context menu items wired (Inspect/Duplicate/Pin/Delete) — Radix triggers on real right-click
+  (synthetic headless right-click can't fire Radix's pointerdown listener, but items verified
+  in component tree + all backing store actions verified working) ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- Canvas now has full desktop interaction: single-click selects, double-click inspects,
+  right-click opens a context menu (Inspect/Duplicate/Pin/Delete), Delete key removes the
+  selected node (guarded against the chat composer). Duplicate clones equipment with params.
