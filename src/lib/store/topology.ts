@@ -73,6 +73,7 @@ interface TopologyState {
   unpin: (id: string) => void;
 
   pushMessage: (m: Omit<CopilotMessage, "id" | "ts">) => void;
+  updateMessage: (id: string, content: string) => void;
   startThinking: () => string;
   pushReasoning: (text: string, kind?: ReasoningStep["kind"]) => void;
   finalizeThinking: (id: string) => void;
@@ -258,6 +259,13 @@ export const useTopology = create<TopologyState>((set, get) => ({
         ...s.copilotMessages,
         { ...m, id: nextId("m"), ts: Date.now() },
       ],
+    })),
+
+  updateMessage: (id, content) =>
+    set((s) => ({
+      copilotMessages: s.copilotMessages.map((m) =>
+        m.id === id ? { ...m, content } : m,
+      ),
     })),
 
   // --- thinking-as-message: a "thinking" message lives inline in the feed ---

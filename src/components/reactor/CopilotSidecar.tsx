@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  Send,
+  ArrowUp,
+  Square,
   Sparkles,
   Zap,
   Recycle,
@@ -10,9 +11,11 @@ import {
   FlaskConical,
   Brain,
   ChevronDown,
-  Square,
-  ArrowDown,
+  Copy,
+  Check,
+  RotateCcw,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTopology, type CopilotMessage } from "@/lib/store/topology";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,13 @@ const QUICK_ACTIONS = [
   { id: "separation", label: "Separation", icon: FlaskConical, prompt: "Add a separator after the reactor train to split product B from unreacted A, with a light-key split fraction of 0.9, followed by a product stream." },
 ];
 
+const EXAMPLE_PROMPTS = [
+  "Design a 3-CSTR cascade for 99% conversion of A → B",
+  "Compare CSTR vs PFR for the same reactor volume",
+  "Add a separator and recycle loop to maximize yield",
+  "Design a PFR train targeting 95% conversion at 380 K",
+];
+
 interface CopilotResponse {
   message: string;
   reasoning: string[];
@@ -43,17 +53,12 @@ function fmtTime(ts: number) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/**
- * Renders a timestamp only after client mount. SSR renders nothing, so
- * server/client never disagree on locale-formatted time (hydration-safe).
- * useSyncExternalStore is the lint-compliant way to detect client mount.
- */
 const emptySubscribe = () => () => {};
 function useIsClient() {
   return useSyncExternalStore(
     emptySubscribe,
-    () => true, // client snapshot
-    () => false, // server snapshot
+    () => true,
+    () => false,
   );
 }
 function Timestamp({ ts }: { ts: number }) {
@@ -63,7 +68,7 @@ function Timestamp({ ts }: { ts: number }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Markdown copilot body (lists, bold, code) — minimal styling.        */
+/* Markdown copilot body                                                */
 /* ------------------------------------------------------------------ */
 function CopilotBody({ content }: { content: string }) {
   return (
@@ -74,7 +79,32 @@ function CopilotBody({ content }: { content: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Thinking block — inline in the chat feed, Claude/Gemini style.      */
+/* Copy button — appears on hover of copilot messages                  */
+/* ------------------------------------------------------------------ */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy");
+    }
+  };
+  return (
+    <button
+      onClick={onCopy}
+      className="rounded p-1 text-zinc-600 opacity-0 transition-all hover:bg-zinc-800 hover:text-zinc-300 group-hover:opacity-100"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Thinking block — inline in the chat feed                             */
 /* ------------------------------------------------------------------ */
 function ThinkingBlock({ message }: { message: CopilotMessage }) {
   const active = !message.done;
@@ -148,7 +178,29 @@ function ThinkingBlock({ message }: { message: CopilotMessage }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Auto-resizing composer                                              */
+/* Circular send button (upward arrow, cyan)                            */
+/* ------------------------------------------------------------------ */
+function SendButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title="Send"
+      className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all",
+        disabled
+          ? "bg-zinc-800 text-zinc-600"
+          : "bg-cyan-500 text-zinc-950 hover:bg-cyan-400 hover:scale-105 active:scale-95",
+      )}
+    >
+      <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Auto-resizing composer                                               */
 /* ------------------------------------------------------------------ */
 function Composer({
   value,
@@ -165,7 +217,6 @@ function Composer({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize: reset to auto then cap at 6 rows (~144px).
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -181,39 +232,29 @@ function Composer({
   };
 
   return (
-    <div className="shrink-0 border-t border-zinc-800/80 p-3">
-      <div className="flex items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 transition-colors focus-within:border-zinc-700">
+    <div className="shrink-0 p-3">
+      <div className="flex items-end gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 transition-all focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-600/50">
         <textarea
           ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Describe a reactor network…  (Enter to send, Shift+Enter for newline)"
+          placeholder="Describe a reactor network…"
           rows={1}
           disabled={isGenerating}
           className="eng-scroll max-h-[144px] flex-1 resize-none bg-transparent text-sm leading-relaxed text-zinc-200 outline-none placeholder:text-zinc-600 disabled:opacity-50"
         />
         {isGenerating ? (
-          <Button
+          <button
             type="button"
-            size="icon"
             onClick={onStop}
-            title="Stop generating"
-            className="h-8 w-8 shrink-0 bg-zinc-700 text-zinc-100 hover:bg-zinc-600"
+            title="Stop"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 transition-all hover:bg-zinc-600 hover:scale-105 active:scale-95"
           >
             <Square className="h-3.5 w-3.5 fill-current" />
-          </Button>
+          </button>
         ) : (
-          <Button
-            type="button"
-            size="icon"
-            onClick={onSend}
-            disabled={!value.trim()}
-            title="Send"
-            className="h-8 w-8 shrink-0 bg-cyan-500 text-zinc-950 hover:bg-cyan-400 disabled:opacity-40"
-          >
-            <Send className="h-3.5 w-3.5" />
-          </Button>
+          <SendButton disabled={!value.trim()} onClick={onSend} />
         )}
       </div>
     </div>
@@ -228,6 +269,7 @@ export function CopilotSidecar() {
   const messages = useTopology((s) => s.copilotMessages);
   const isGenerating = useTopology((s) => s.isGenerating);
   const pushMessage = useTopology((s) => s.pushMessage);
+  const updateMessage = useTopology((s) => s.updateMessage);
   const startThinking = useTopology((s) => s.startThinking);
   const pushReasoning = useTopology((s) => s.pushReasoning);
   const finalizeThinking = useTopology((s) => s.finalizeThinking);
@@ -239,8 +281,8 @@ export function CopilotSidecar() {
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Smart auto-scroll: only stick to bottom if the user is already there.
   const onFeedScroll = useCallback(() => {
     const el = feedRef.current;
     if (!el) return;
@@ -263,80 +305,145 @@ export function CopilotSidecar() {
     setShowJump(false);
   }, []);
 
-  const runPrompt = async (prompt: string) => {
-    if (!prompt.trim() || isGenerating) return;
-    setInput("");
-    pushMessage({ role: "user", content: prompt });
-    setGenerating(true);
-    stickToBottomRef.current = true;
-    const thinkId = startThinking();
-    pushReasoning("Parsing engineering intent…", "info");
-    pushReasoning("Loading first-order Arrhenius kinetic model", "verify");
+  // Stream text character-by-character into a message (typing effect).
+  const streamText = useCallback(
+    (msgId: string, fullText: string) => {
+      let i = 0;
+      const chunk = Math.max(2, Math.ceil(fullText.length / 120));
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+      streamTimerRef.current = setInterval(() => {
+        i += chunk;
+        if (i >= fullText.length) {
+          updateMessage(msgId, fullText);
+          if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+          streamTimerRef.current = null;
+          setGenerating(false);
+        } else {
+          updateMessage(msgId, fullText.slice(0, i));
+        }
+      }, 16);
+    },
+    [updateMessage, setGenerating],
+  );
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/copilot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `${prompt}\n\n[Current topology for context: ${network.nodes.length} units, ${network.streams.length} streams. You may extend or replace it.]`,
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`Copilot error ${res.status}`);
-      const data = (await res.json()) as CopilotResponse;
-
-      for (let i = 0; i < data.reasoning.length; i++) {
-        if (controller.signal.aborted) break;
-        const step = data.reasoning[i];
-        const kind = /select|choose|cstr|pfr/i.test(step)
-          ? "select"
-          : /verify|check|converg|kinetic|constraint/i.test(step)
-            ? "verify"
-            : /layout|position|place|route/i.test(step)
-              ? "layout"
-              : "info";
-        await new Promise((r) => setTimeout(r, 280));
-        pushReasoning(step, kind);
+  const runPrompt = useCallback(
+    async (prompt: string) => {
+      if (!prompt.trim() || isGenerating) return;
+      // If streaming is still in progress, stop it first.
+      if (streamTimerRef.current) {
+        clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
       }
+      setInput("");
+      pushMessage({ role: "user", content: prompt });
+      setGenerating(true);
+      stickToBottomRef.current = true;
+      const thinkId = startThinking();
+      pushReasoning("Parsing engineering intent…", "info");
+      pushReasoning("Loading first-order Arrhenius kinetic model", "verify");
 
-      if (controller.signal.aborted) {
-        pushReasoning("Stopped by user", "info");
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch("/api/copilot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: `${prompt}\n\n[Current topology for context: ${network.nodes.length} units, ${network.streams.length} streams. You may extend or replace it.]`,
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Copilot error ${res.status}`);
+        const data = (await res.json()) as CopilotResponse;
+
+        for (let i = 0; i < data.reasoning.length; i++) {
+          if (controller.signal.aborted) break;
+          const step = data.reasoning[i];
+          const kind = /select|choose|cstr|pfr/i.test(step)
+            ? "select"
+            : /verify|check|converg|kinetic|constraint/i.test(step)
+              ? "verify"
+              : /layout|position|place|route/i.test(step)
+                ? "layout"
+                : "info";
+          await new Promise((r) => setTimeout(r, 280));
+          pushReasoning(step, kind);
+        }
+
+        if (controller.signal.aborted) {
+          pushReasoning("Stopped by user", "info");
+          finalizeThinking(thinkId);
+          setGenerating(false);
+          return;
+        }
+
+        if (data.topology?.nodes?.length) {
+          setNetwork(data.topology);
+          pushReasoning("Topology committed · dispatching verified solvers", "info");
+        }
+        finalizeThinking(thinkId);
+
+        // Push an empty copilot message, then stream the text into it.
+        const msgId = `m${Date.now()}`;
+        pushMessage({ role: "copilot", content: "" });
+        // The message just pushed gets a new id from the store; find it by
+        // looking for the last copilot message with empty content.
+        const state = useTopology.getState();
+        const lastCopilot = [...state.copilotMessages].reverse().find((m) => m.role === "copilot" && m.content === "");
+        const targetId = lastCopilot?.id ?? msgId;
+        streamText(targetId, data.message);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") {
+          pushReasoning("Stopped by user", "info");
+          finalizeThinking(thinkId);
+          setGenerating(false);
+          return;
+        }
         finalizeThinking(thinkId);
         setGenerating(false);
-        return;
+        pushMessage({
+          role: "copilot",
+          content: "Could not reach the reasoning engine. The verified solver layer is still active — adjust parameters in the Deep Dive panel.",
+        });
+        toast.error("Copilot request failed", { description: (e as Error).message });
+      } finally {
+        abortRef.current = null;
       }
-
-      if (data.topology?.nodes?.length) {
-        setNetwork(data.topology);
-        pushReasoning("Topology committed · dispatching verified solvers", "info");
-      }
-      finalizeThinking(thinkId);
-      pushMessage({ role: "copilot", content: data.message });
-      setGenerating(false);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") {
-        pushReasoning("Stopped by user", "info");
-        finalizeThinking(thinkId);
-        setGenerating(false);
-        return;
-      }
-      finalizeThinking(thinkId);
-      setGenerating(false);
-      pushMessage({
-        role: "copilot",
-        content: "Could not reach the reasoning engine. The verified solver layer is still active — adjust parameters in the Deep Dive panel.",
-      });
-      toast.error("Copilot request failed", { description: (e as Error).message });
-    } finally {
-      abortRef.current = null;
-    }
-  };
+    },
+    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, network, streamText],
+  );
 
   const stop = useCallback(() => {
+    if (streamTimerRef.current) {
+      clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
+      setGenerating(false);
+    }
     abortRef.current?.abort();
+  }, [setGenerating]);
+
+  // Regenerate: find the last user message and re-run it.
+  const regenerate = useCallback(() => {
+    if (isGenerating) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser) runPrompt(lastUser.content);
+  }, [isGenerating, messages, runPrompt]);
+
+  // Find the last copilot message id (for regenerate button placement).
+  const lastCopilotId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "copilot") return messages[i].id;
+    }
+    return null;
+  }, [messages]);
+
+  const showExamples = messages.length <= 1;
+
+  useEffect(() => {
+    return () => {
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    };
   }, []);
 
   return (
@@ -365,19 +472,32 @@ export function CopilotSidecar() {
         </div>
       </div>
 
-      {/* Chat feed — NATIVE scroll, min-h-0 so it never pushes the composer */}
+      {/* Chat feed */}
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={feedRef}
-          onScroll={onFeedScroll}
-          className="eng-scroll absolute inset-0 overflow-y-auto"
-        >
+        <div ref={feedRef} onScroll={onFeedScroll} className="eng-scroll absolute inset-0 overflow-y-auto">
           <div className="space-y-4 px-4 py-4">
-            {messages.map((m) => {
-              if (m.role === "thinking") return <ThinkingBlock key={m.id} message={m} />;
+            {messages.map((m, idx) => {
+              if (m.role === "thinking") {
+                return (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ThinkingBlock message={m} />
+                  </motion.div>
+                );
+              }
               if (m.role === "user") {
                 return (
-                  <div key={m.id} className="group flex justify-end">
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="group flex justify-end"
+                  >
                     <div className="flex max-w-[85%] flex-col items-end">
                       <div className="rounded-2xl rounded-br-sm bg-zinc-800 px-3 py-2 text-[12.5px] leading-relaxed text-zinc-200 whitespace-pre-wrap">
                         {m.content}
@@ -386,26 +506,83 @@ export function CopilotSidecar() {
                         <Timestamp ts={m.ts} />
                       </span>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               }
+              const isLast = m.id === lastCopilotId;
+              const isStreaming = isGenerating && isLast && m.content.length > 0;
               return (
-                <div key={m.id} className="group flex justify-start">
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="group flex flex-col items-start"
+                >
                   <div className="flex max-w-[92%] flex-col">
                     <div className="mb-0.5 flex items-center gap-1">
                       <Sparkles className="h-2.5 w-2.5 text-cyan-500/70" />
                       <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-600">
                         copilot
                       </span>
+                      {/* streaming cursor */}
+                      {isStreaming && (
+                        <span className="ml-0.5 inline-block h-3 w-0.5 animate-pulse bg-cyan-400" />
+                      )}
                     </div>
-                    <CopilotBody content={m.content} />
-                    <span className="mt-0.5 px-1 text-[9px] text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Timestamp ts={m.ts} />
-                    </span>
+                    {m.content ? (
+                      <CopilotBody content={m.content} />
+                    ) : (
+                      <div className="flex gap-0.5 py-1.5">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-600" />
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-600 [animation-delay:120ms]" />
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-600 [animation-delay:240ms]" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 mt-0.5 px-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <CopyButton text={m.content} />
+                      {isLast && !isGenerating && (
+                        <button
+                          onClick={regenerate}
+                          className="rounded p-1 text-zinc-600 transition-all hover:bg-zinc-800 hover:text-zinc-300"
+                          title="Regenerate"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      )}
+                      <span className="text-[9px] text-zinc-700">
+                        <Timestamp ts={m.ts} />
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+
+            {/* Example prompts in empty state */}
+            <AnimatePresence>
+              {showExamples && !isGenerating && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-1.5 pt-2"
+                >
+                  <div className="px-1 text-[10px] uppercase tracking-wider text-zinc-600">
+                    Try
+                  </div>
+                  {EXAMPLE_PROMPTS.map((ex) => (
+                    <button
+                      key={ex}
+                      onClick={() => runPrompt(ex)}
+                      className="block w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-left text-[12px] text-zinc-400 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-200"
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -415,7 +592,7 @@ export function CopilotSidecar() {
             onClick={jumpToBottom}
             className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900/95 px-2.5 py-1 text-[10px] text-zinc-300 shadow-lg backdrop-blur transition-colors hover:border-zinc-600 hover:text-white"
           >
-            <ArrowDown className="h-2.5 w-2.5" />
+            <ArrowUp className="h-2.5 w-2.5" />
             Latest
           </button>
         )}

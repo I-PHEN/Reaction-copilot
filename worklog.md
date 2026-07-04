@@ -375,3 +375,38 @@ Verification (Agent Browser):
 Stage Summary:
 - Streams now visually connect to the equipment nozzles (no gap). Double-click reliably
   opens the Deep Dive config panel on all equipment types.
+
+---
+Task ID: UX-fixes-8
+Agent: Orchestrator (main)
+Task: Premium chat area — streaming text, circular send button, copy-on-hover, regenerate, example prompts, entrance animations.
+
+Work Log:
+- Store: added updateMessage(id, content) action for streaming text into a message.
+- CopilotSidecar full rewrite:
+  1. STREAMING TEXT: after the LLM returns, pushes an empty copilot message then streams the
+     answer character-by-character via setInterval (~2 chars per 16ms frame, ~120 frames total).
+     A blinking cyan cursor shows during streaming. The "thinking" dots show while content is empty.
+  2. CIRCULAR SEND BUTTON: replaced the icon Button with a custom 36px circle (rounded-full)
+     containing a white ArrowUp icon, cyan when enabled, zinc-800 when disabled, with hover scale.
+     Matches the user's reference image and the app's cyan accent.
+  3. COPY-ON-HOVER: each copilot message shows a Copy button (lucide Copy/Check icons) on hover
+     that copies the full markdown to clipboard with a 1.5s checkmark confirmation.
+  4. REGENERATE: a RotateCcw button appears on the last copilot message (when not generating)
+     that re-runs the last user prompt.
+  5. EXAMPLE PROMPTS: when the conversation has only the welcome message, 4 clickable example
+     prompt chips render below (3-CSTR cascade, CSTR vs PFR compare, separator+recycle, PFR train).
+     They disappear once the user sends a message (AnimatePresence fade).
+  6. ENTRANCE ANIMATION: every message (user/copilot/thinking) fades in + slides up 4px over
+     200ms via framer-motion.
+  7. REFINED COMPOSER: rounded-2xl container with focus-within ring + border brighten.
+- No copilot avatar (per user request).
+
+Verification (Agent Browser):
+- Send button: 36×36 circular, ArrowUp SVG, cyan when enabled ✓.
+- Example prompts: 4 visible in empty state ✓.
+- Streaming: copilot message appears empty → dots → text types in → streaming cursor ✓.
+- Copy button: present on copilot messages, appears on hover ✓.
+- Regenerate button: present on last copilot message ✓.
+- Layout: rootScrollH=900=viewportH, composerY=822.5 (no push-down) ✓.
+- No console errors; lint clean ✓.
