@@ -152,15 +152,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   selectedNodeId: "cstr-1",
   inspectedNodeId: "cstr-1",
   pinnedNodeIds: [],
-  copilotMessages: [
-    {
-      id: "m0",
-      role: "copilot",
-      content:
-        "Reactor Synthesis Copilot online. I generate verified flowsheets grounded in first-order Arrhenius kinetics. Try: \u201cDesign a 2-stage CSTR + PFR train for 90% conversion\u201d, or use a Quick Action.",
-      ts: 0,
-    },
-  ],
+  copilotMessages: [],
   reasoning: [],
   isGenerating: false,
   isSolving: false,

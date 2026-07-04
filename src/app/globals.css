@@ -166,6 +166,11 @@
   pointer-events: all;
 }
 
+@keyframes kpiFlash {
+  0% { background-color: rgba(34, 211, 238, 0.18); }
+  100% { background-color: transparent; }
+}
+
 /* Custom slim scrollbar for engineering panels */
 .eng-scroll::-webkit-scrollbar {
   width: 6px;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Pin,
   PinOff,
@@ -13,6 +14,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  SlidersHorizontal,
+  LineChart,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   Area,
@@ -26,15 +30,14 @@ import { useTopology } from "@/lib/store/topology";
 import { DEFAULT_PARAMS, type NetworkNode, type SolverResult } from "@/lib/solvers";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const STATUS_META: Record<
   SolverResult["status"],
   { label: string; color: string; ring: string; Icon: typeof CheckCircle2 }
 > = {
-  nominal: { label: "Nominal", color: "text-blue-300", ring: "ring-blue-500/30", Icon: CheckCircle2 },
-  warning: { label: "Constraint", color: "text-amber-300", ring: "ring-amber-500/30", Icon: AlertTriangle },
-  error: { label: "Non-convergent", color: "text-red-300", ring: "ring-red-500/30", Icon: XCircle },
+  nominal: { label: "Nominal", color: "text-emerald-400", ring: "ring-emerald-500/30", Icon: CheckCircle2 },
+  warning: { label: "Constraint", color: "text-amber-400", ring: "ring-amber-500/30", Icon: AlertTriangle },
+  error: { label: "Non-convergent", color: "text-red-400", ring: "ring-red-500/30", Icon: XCircle },
 };
 
 function Kpi({
@@ -110,6 +113,8 @@ function ParamControl({
   );
 }
 
+type TabId = "overview" | "profile" | "parameters";
+
 function DeepDiveCard({
   node,
   result,
@@ -137,11 +142,62 @@ function DeepDiveCard({
   );
 
   const isReactor = node.type === "cstr" || node.type === "pfr";
+  const isPfr = node.type === "pfr";
+  const hasParams = isReactor || node.type === "separator" || node.type === "feed";
+  const hasDiagnostics = result && result.diagnostics.length > 0;
+
+  // Tabs: only show Profile for PFR. Parameters only if hasParams.
+  const availableTabs: TabId[] = ["overview"];
+  if (isPfr) availableTabs.push("profile");
+  if (hasParams) availableTabs.push("parameters");
+  const [tab, setTab] = useState<TabId>("overview");
+
+  // --- Live KPI flash: a key change on the flash overlay remounts it,
+  // replaying the CSS kpiFlash animation whenever conversion changes. ---
+  const convKey = result?.conversion?.toFixed(4) ?? "none";
+
+  if (compact) {
+    return (
+      <div
+        className={cn(
+          "glass-card flex w-[190px] flex-col gap-1.5 rounded-xl border border-zinc-700/40 bg-zinc-900/70 p-2.5 backdrop-blur-md",
+          "shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-inset",
+          meta.ring,
+        )}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <span className={cn("h-1.5 w-1.5 rounded-full", status === "nominal" ? "bg-emerald-500" : status === "warning" ? "bg-amber-500" : "bg-red-500")} />
+            <span className="text-[12px] font-semibold text-zinc-100">{node.label}</span>
+          </div>
+          <button
+            onClick={() => togglePin(node.id)}
+            title="Unpin"
+            className="rounded p-0.5 text-cyan-300 transition-colors hover:bg-cyan-500/20"
+          >
+            <Pin className="h-3 w-3" />
+          </button>
+        </div>
+        {result && (
+          <div className="grid grid-cols-2 gap-1">
+            <Kpi icon={Gauge} label="X" value={`${(result.conversion * 100).toFixed(1)}`} unit="%" />
+            <Kpi icon={Timer} label="τ" value={result.residenceTime.toFixed(2)} unit="s" />
+          </div>
+        )}
+        <button
+          onClick={() => selectNode(node.id)}
+          className="w-full rounded-md border border-zinc-800/50 bg-zinc-800/60 py-1 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-700/60 hover:text-white"
+        >
+          Inspect
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
-        "glass-card flex w-[290px] flex-col gap-2 rounded-xl border border-zinc-700/40 bg-zinc-900/70 p-3 backdrop-blur-md",
+        "glass-card flex w-[300px] flex-col gap-2 rounded-xl border border-zinc-700/40 bg-zinc-900/80 p-3 backdrop-blur-md",
         "shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-inset",
         meta.ring,
       )}
@@ -186,135 +242,190 @@ function DeepDiveCard({
         )}
       </div>
 
-      {/* KPI grid */}
-      {result && (
-        <div className="grid grid-cols-2 gap-1.5">
-          <Kpi icon={Gauge} label="Conversion" value={`${(result.conversion * 100).toFixed(1)}`} unit="%" tone={result.conversion > 0.9 ? "blue" : "default"} />
-          <Kpi icon={Timer} label="Residence τ" value={result.residenceTime.toFixed(2)} unit="s" tone={result.residenceTime > 0 && result.residenceTime < 0.5 ? "amber" : "default"} />
-          <Kpi icon={Thermometer} label="T outlet" value={result.outletTemperature.toFixed(0)} unit="K" />
-          <Kpi icon={TrendingUp} label="k(T)" value={result.rateConstant < 1e-3 ? result.rateConstant.toExponential(1) : result.rateConstant.toFixed(3)} unit="1/s" />
-          <Kpi icon={Beaker} label="A outlet" value={result.outletFlow.toFixed(2)} unit="mol/s" />
-          <Kpi icon={Gauge} label="Residual" value={result.residual < 1e-4 ? result.residual.toExponential(1) : result.residual.toFixed(4)} tone={result.residual > 0.1 ? "amber" : "default"} />
+      {/* tab bar — only when multiple tabs */}
+      {availableTabs.length > 1 && (
+        <div className="flex gap-0.5 rounded-md bg-zinc-950/50 p-0.5">
+          {availableTabs.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide transition-colors",
+                tab === t
+                  ? "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              {t === "overview" && <LayoutDashboard className="h-2.5 w-2.5" />}
+              {t === "profile" && <LineChart className="h-2.5 w-2.5" />}
+              {t === "parameters" && <SlidersHorizontal className="h-2.5 w-2.5" />}
+              {t}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* profile chart for PFR */}
-      {!compact && chartData.length > 0 && (
-        <div className="rounded-md border border-zinc-800/50 bg-zinc-950/50 p-2">
-          <div className="mb-1 text-[9px] uppercase tracking-wider text-zinc-500">
-            Axial conversion profile
-          </div>
-          <ResponsiveContainer width="100%" height={70}>
-            <AreaChart data={chartData} margin={{ top: 2, right: 4, bottom: 0, left: -18 }}>
-              <defs>
-                <linearGradient id={`grad-${node.id}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="v" tick={{ fontSize: 8, fill: "#64748b" }} stroke="#334155" />
-              <YAxis tick={{ fontSize: 8, fill: "#64748b" }} stroke="#334155" domain={[0, 100]} />
-              <Tooltip
-                contentStyle={{
-                  background: "#0f172a",
-                  border: "1px solid #334155",
-                  borderRadius: 6,
-                  fontSize: 10,
-                  color: "#e2e8f0",
-                }}
-              />
-              <Area type="monotone" dataKey="x" stroke="#22d3ee" strokeWidth={1.5} fill={`url(#grad-${node.id})`} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* tab content */}
+      <AnimatePresence mode="wait">
+        {tab === "overview" && (
+          <motion.div
+            key="overview"
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-1.5"
+          >
+            {result && (
+              <div className="relative grid grid-cols-2 gap-1.5 rounded-md">
+                <div
+                  key={convKey}
+                  className="pointer-events-none absolute inset-0 rounded-md"
+                  style={{ animation: "kpiFlash 0.45s ease-out" }}
+                />
+                <Kpi icon={Gauge} label="Conversion" value={`${(result.conversion * 100).toFixed(1)}`} unit="%" tone={result.conversion > 0.9 ? "blue" : "default"} />
+                <Kpi icon={Timer} label="Residence τ" value={result.residenceTime.toFixed(2)} unit="s" tone={result.residenceTime > 0 && result.residenceTime < 0.5 ? "amber" : "default"} />
+                <Kpi icon={Thermometer} label="T outlet" value={result.outletTemperature.toFixed(0)} unit="K" />
+                <Kpi icon={TrendingUp} label="k(T)" value={result.rateConstant < 1e-3 ? result.rateConstant.toExponential(1) : result.rateConstant.toFixed(3)} unit="1/s" />
+                <Kpi icon={Beaker} label="A outlet" value={result.outletFlow.toFixed(2)} unit="mol/s" />
+                <Kpi icon={Gauge} label="Residual" value={result.residual < 1e-4 ? result.residual.toExponential(1) : result.residual.toFixed(4)} tone={result.residual > 0.1 ? "amber" : "default"} />
+              </div>
+            )}
+            {hasDiagnostics && (
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2">
+                <div className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-amber-300/80">
+                  <AlertTriangle className="h-2.5 w-2.5" /> Diagnostics
+                </div>
+                <ul className="space-y-0.5 text-[10px] text-amber-200/80">
+                  {result!.diagnostics.map((d, i) => (
+                    <li key={i} className="font-mono">· {d}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </motion.div>
+        )}
 
-      {/* diagnostics */}
-      {!compact && result && result.diagnostics.length > 0 && (
-        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2">
-          <div className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-amber-300/80">
-            <AlertTriangle className="h-2.5 w-2.5" /> Diagnostics
-          </div>
-          <ul className="space-y-0.5 text-[10px] text-amber-200/80">
-            {result.diagnostics.map((d, i) => (
-              <li key={i} className="font-mono">· {d}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {tab === "profile" && chartData.length > 0 && (
+          <motion.div
+            key="profile"
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.15 }}
+          >
+            <div className="rounded-md border border-zinc-800/50 bg-zinc-950/50 p-2">
+              <div className="mb-1 text-[9px] uppercase tracking-wider text-zinc-500">
+                Axial conversion profile
+              </div>
+              <ResponsiveContainer width="100%" height={90}>
+                <AreaChart data={chartData} margin={{ top: 2, right: 4, bottom: 0, left: -18 }}>
+                  <defs>
+                    <linearGradient id={`grad-${node.id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="v" tick={{ fontSize: 8, fill: "#71717a" }} stroke="#3f3f46" />
+                  <YAxis tick={{ fontSize: 8, fill: "#71717a" }} stroke="#3f3f46" domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "#09090b",
+                      border: "1px solid #3f3f46",
+                      borderRadius: 6,
+                      fontSize: 10,
+                      color: "#e4e4e7",
+                    }}
+                  />
+                  <Area type="monotone" dataKey="x" stroke="#22d3ee" strokeWidth={1.5} fill={`url(#grad-${node.id})`} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            {hasDiagnostics && (
+              <div className="mt-1.5 rounded-md border border-amber-500/20 bg-amber-500/5 p-2">
+                <div className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-amber-300/80">
+                  <AlertTriangle className="h-2.5 w-2.5" /> Diagnostics
+                </div>
+                <ul className="space-y-0.5 text-[10px] text-amber-200/80">
+                  {result!.diagnostics.map((d, i) => (
+                    <li key={i} className="font-mono">· {d}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </motion.div>
+        )}
 
-      {/* parameter controls — constructive iteration, bypasses LLM */}
-      {!compact && (isReactor || node.type === "separator" || node.type === "feed") && (
-        <div className="space-y-2 rounded-md border border-zinc-800/50 bg-zinc-950/40 p-2">
-          <div className="text-[9px] uppercase tracking-wider text-zinc-500">
-            Parameters · solver-bound
-          </div>
-          {isReactor && (
-            <>
+        {tab === "parameters" && hasParams && (
+          <motion.div
+            key="parameters"
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-2.5 rounded-md border border-zinc-800/50 bg-zinc-950/40 p-2.5"
+          >
+            {isReactor && (
+              <>
+                <ParamControl
+                  label="Volume"
+                  value={params.volume}
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  unit="m³"
+                  onChange={(v) => updateNodeParams(node.id, { volume: v })}
+                />
+                <ParamControl
+                  label="Temperature"
+                  value={params.temperature}
+                  min={290}
+                  max={450}
+                  step={1}
+                  unit="K"
+                  onChange={(v) => updateNodeParams(node.id, { temperature: v })}
+                />
+              </>
+            )}
+            {node.type === "separator" && (
               <ParamControl
-                label="Volume"
-                value={params.volume}
-                min={0.1}
-                max={10}
-                step={0.1}
-                unit="m³"
-                onChange={(v) => updateNodeParams(node.id, { volume: v })}
+                label="Split fraction"
+                value={params.splitFraction}
+                min={0}
+                max={1}
+                step={0.01}
+                unit=""
+                onChange={(v) => updateNodeParams(node.id, { splitFraction: v })}
               />
-              <ParamControl
-                label="Temperature"
-                value={params.temperature}
-                min={290}
-                max={450}
-                step={1}
-                unit="K"
-                onChange={(v) => updateNodeParams(node.id, { temperature: v })}
-              />
-            </>
-          )}
-          {node.type === "separator" && (
-            <ParamControl
-              label="Split fraction"
-              value={params.splitFraction}
-              min={0}
-              max={1}
-              step={0.01}
-              unit=""
-              onChange={(v) => updateNodeParams(node.id, { splitFraction: v })}
-            />
-          )}
-          {node.type === "feed" && (
-            <>
-              <ParamControl
-                label="Feed rate"
-                value={params.feedRate}
-                min={1}
-                max={30}
-                step={0.5}
-                unit="mol/s"
-                onChange={(v) => updateNodeParams(node.id, { feedRate: v })}
-              />
-              <ParamControl
-                label="Vol. flow"
-                value={params.volumetricFlow}
-                min={0.5}
-                max={6}
-                step={0.1}
-                unit="m³/s"
-                onChange={(v) => updateNodeParams(node.id, { volumetricFlow: v })}
-              />
-            </>
-          )}
-        </div>
-      )}
-
-      {compact && (
-        <button
-          onClick={() => selectNode(node.id)}
-          className="mt-0.5 w-full rounded-md border border-zinc-800/50 bg-zinc-800/60 py-1 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-700/60 hover:text-white"
-        >
-          Inspect
-        </button>
-      )}
+            )}
+            {node.type === "feed" && (
+              <>
+                <ParamControl
+                  label="Feed rate"
+                  value={params.feedRate}
+                  min={1}
+                  max={30}
+                  step={0.5}
+                  unit="mol/s"
+                  onChange={(v) => updateNodeParams(node.id, { feedRate: v })}
+                />
+                <ParamControl
+                  label="Vol. flow"
+                  value={params.volumetricFlow}
+                  min={0.5}
+                  max={6}
+                  step={0.1}
+                  unit="m³/s"
+                  onChange={(v) => updateNodeParams(node.id, { volumetricFlow: v })}
+                />
+              </>
+            )}
+            <div className="pt-0.5 text-[9px] text-zinc-600">
+              Adjusting parameters triggers the verified solver directly — bypasses the LLM.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -332,29 +443,49 @@ export function DeepDiveOverlay() {
     .map((id) => network.nodes.find((n) => n.id === id))
     .filter(Boolean) as NetworkNode[];
 
-  if (!inspectedNode && pinnedNodes.length === 0) return null;
+  const show = inspectedNode || pinnedNodes.length > 0;
 
   return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex max-w-[92%] -translate-x-1/2 flex-row items-end gap-2">
-      {/* pinned comparison cards (compact) */}
-      {pinnedNodes.map((n) => (
-        <div key={n.id} className="pointer-events-auto">
-          <DeepDiveCard node={n} result={report?.results[n.id]} compact />
-        </div>
-      ))}
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex max-w-[92%] -translate-x-1/2 flex-row items-end gap-2"
+        >
+          {pinnedNodes.map((n) => (
+            <motion.div
+              key={n.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="pointer-events-auto"
+            >
+              <DeepDiveCard node={n} result={report?.results[n.id]} compact />
+            </motion.div>
+          ))}
 
-      {/* inspected node — full card */}
-      {inspectedNode && (
-        <div className="pointer-events-auto max-h-[78vh]">
-          <ScrollArea className="eng-scroll max-h-[78vh]">
-            <DeepDiveCard
-              node={inspectedNode}
-              result={report?.results[inspectedNode.id]}
-              onClose={() => inspectNode(null)}
-            />
-          </ScrollArea>
-        </div>
+          {inspectedNode && (
+            <motion.div
+              key={inspectedNode.id}
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.97 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="pointer-events-auto max-h-[78vh] overflow-y-auto eng-scroll"
+            >
+              <DeepDiveCard
+                node={inspectedNode}
+                result={report?.results[inspectedNode.id]}
+                onClose={() => inspectNode(null)}
+              />
+            </motion.div>
+          )}
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   );
 }

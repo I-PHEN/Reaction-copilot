@@ -410,3 +410,45 @@ Verification (Agent Browser):
 - Regenerate button: present on last copilot message ✓.
 - Layout: rootScrollH=900=viewportH, composerY=822.5 (no push-down) ✓.
 - No console errors; lint clean ✓.
+
+---
+Task ID: UX-fixes-9
+Agent: Orchestrator (main)
+Task: Remove welcome message + Deep Dive overlay polish (tabs, entrance animation, live KPI flash).
+
+Work Log:
+- Removed the seed "Reactor Synthesis Copilot online…" welcome message from the store. The
+  chat now starts completely empty, showing only the example prompt chips — a cleaner modern
+  empty state. Updated showExamples condition to === 0.
+- DEEP DIVE OVERLAY POLISH:
+  1. ENTRANCE ANIMATION: wrapped the overlay container + each card in framer-motion AnimatePresence.
+     Cards slide up 16px + fade + scale 0.97→1 over 250ms on appear; reverse on close. Tab content
+     cross-fades with a 3px slide.
+  2. TABBED LAYOUT: the full card now has a tab bar (Overview / Profile / Parameters) that only
+     shows when multiple tabs are available. Overview = status + KPIs + diagnostics. Profile =
+     PFR axial conversion chart (only shown for PFR). Parameters = solver-bound sliders. Each tab
+     has an icon (LayoutDashboard / LineChart / SlidersHorizontal). Tab transitions are animated.
+  3. LIVE KPI FLASH: when the solver's conversion value changes (e.g. from dragging a parameter
+     slider), the KPI grid flashes a cyan tint that fades out over 450ms. Implemented via a
+     key-based CSS animation (kpiFlash keyframe in globals.css) — when conversion changes, the
+     key changes, the overlay div remounts and replays the animation. No setState-in-effect,
+     lint-compliant. Also added a note in the Parameters tab: "Adjusting parameters triggers the
+     verified solver directly — bypasses the LLM."
+- Compact pinned cards redesigned: smaller (190px), 2 KPIs only (X + τ), inline status dot.
+- ScrollArea replaced with native overflow-y-auto + eng-scroll for the full card (avoids the
+  Radix min-height issue that caused push-down in the chat).
+
+Verification (Agent Browser):
+- Welcome message GONE; chat shows only "TRY" + 4 example prompts in empty state ✓.
+- Deep Dive tabs: CSTR shows Overview + Parameters (2 tabs); PFR shows Overview + Profile +
+  Parameters (3 tabs) ✓.
+- Tab switching works: Parameters shows Volume/Temperature sliders; Overview shows KPIs;
+  Profile shows axial chart ✓.
+- Close button dismisses card; double-click PFR reopens with animation ✓.
+- framer-motion transforms present (11 animated elements) ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- Chat starts clean (no welcome message). Deep Dive overlay is now tabbed, animated, and shows
+  live solver reactions via KPI flash. Premium feel achieved without drifting from the
+  engineering-first direction.

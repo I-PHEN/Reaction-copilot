@@ -438,7 +438,7 @@ export function CopilotSidecar() {
     return null;
   }, [messages]);
 
-  const showExamples = messages.length <= 1;
+  const showExamples = messages.length === 0;
 
   useEffect(() => {
     return () => {
