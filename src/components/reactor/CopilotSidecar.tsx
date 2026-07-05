@@ -276,6 +276,7 @@ export function CopilotSidecar() {
   const setGenerating = useTopology((s) => s.setGenerating);
   const setNetwork = useTopology((s) => s.setNetwork);
   const network = useTopology((s) => s.network);
+  const report = useTopology((s) => s.report);
 
   const feedRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -350,7 +351,11 @@ export function CopilotSidecar() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: `${prompt}\n\n[Current topology for context: ${network.nodes.length} units, ${network.streams.length} streams. You may extend or replace it.]`,
+            prompt,
+            context: {
+              topology: network,
+              report,
+            },
           }),
           signal: controller.signal,
         });
@@ -381,6 +386,8 @@ export function CopilotSidecar() {
         if (data.topology?.nodes?.length) {
           setNetwork(data.topology);
           pushReasoning("Topology committed · dispatching verified solvers", "info");
+        } else if (!data.topology) {
+          pushReasoning("Analyzed current topology against verified solver report", "verify");
         }
         finalizeThinking(thinkId);
 
@@ -411,7 +418,7 @@ export function CopilotSidecar() {
         abortRef.current = null;
       }
     },
-    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, network, streamText],
+    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, network, report, streamText],
   );
 
   const stop = useCallback(() => {

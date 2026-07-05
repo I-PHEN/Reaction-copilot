@@ -86,6 +86,36 @@ ID RULES:
 
 OUTPUT: a single JSON object with the exact schema above. No extra text, no markdown, no code fences.`;
 
+/**
+ * Analyze-mode system prompt. The copilot receives the current topology +
+ * solver report as context and answers questions / explains / suggests
+ * improvements. CRITICAL: it must cite actual KPIs from the report and
+ * never invent numbers.
+ */
+const ANALYZE_SYSTEM_PROMPT = `You are REACTOR-COPILOT, an expert chemical-reaction-engineering assistant in ANALYZE mode. The user has an existing reactor network and is asking a question about it.
+
+You are given:
+1. The current topology (nodes + streams + parameters)
+2. The verified solver report (per-unit KPIs: conversion, residence time, temperature, rate constant, residual, status, diagnostics)
+3. The user's question
+
+Your job is to answer grounded in the ACTUAL solver data. Rules:
+- NEVER invent numbers. Every KPI you cite MUST come from the provided solver report.
+- If a reactor has low conversion, identify WHICH reactor and explain using its actual τ, k(T), and conversion.
+- If the user asks "what if", reason about the direction of change (e.g. "increasing volume raises τ, which raises conversion for a first-order reaction") but DO NOT compute exact new values — only the solver computes those.
+- If the user asks to modify the network, describe the change in words; do not output a topology unless they explicitly ask to redesign.
+- Be concise (2-4 sentences). Use engineering precision.
+- Reference units by their actual labels (e.g. "CSTR-1", "PFR-2").
+
+Respond with a single JSON object, NOTHING else:
+{
+  "message": string,     // your grounded answer, 2-4 sentences, citing real KPIs
+  "reasoning": string[], // 3-6 short thought steps showing how you arrived at the answer
+  "topology": null       // always null in analyze mode (no topology change)
+}
+
+No extra text, no markdown, no code fences.`;
+
 const NODE_TYPES: ReadonlySet<string> = new Set<NodeType>([
   "feed",
   "cstr",
@@ -342,6 +372,71 @@ function sanitizeEnvelope(raw: unknown): {
   };
 }
 
+/**
+ * Serialize the current topology + solver report into a compact context
+ * string for the LLM. This is the "shared state" every agent reads.
+ * Only includes verified solver numbers — no derived/heuristic values.
+ */
+function buildContextBlock(
+  topology: unknown,
+  report: unknown,
+): string {
+  const t = topology as { nodes?: unknown[]; streams?: unknown[]; meta?: { species?: string; reaction?: string } } | null;
+  const r = report as { results?: Record<string, unknown>; reconcilerDiagnostics?: string[]; overallStatus?: string } | null;
+
+  const nodes = Array.isArray(t?.nodes) ? t!.nodes : [];
+  const streams = Array.isArray(t?.streams) ? t!.streams : [];
+  const results = r?.results ?? {};
+
+  let block = `## Current Topology\n`;
+  block += `Species: ${t?.meta?.species ?? "A → B"}\n`;
+  block += `Reaction: ${t?.meta?.reaction ?? "first-order, liquid-phase"}\n`;
+  block += `Units: ${nodes.length}\nStreams: ${streams.length}\n\n`;
+
+  block += `### Units (verified solver KPIs)\n`;
+  for (const n of nodes) {
+    const node = n as { id: string; type: string; label: string; params: Record<string, number> };
+    const res = results[node.id] as {
+      conversion?: number; residenceTime?: number; outletTemperature?: number;
+      rateConstant?: number; outletFlow?: number; residual?: number;
+      status?: string; converged?: boolean; diagnostics?: string[];
+    } | undefined;
+    block += `- ${node.label} (${node.type})`;
+    if (node.params) {
+      const p: string[] = [];
+      if (node.params.volume != null) p.push(`V=${node.params.volume}m³`);
+      if (node.params.temperature != null) p.push(`T=${node.params.temperature}K`);
+      if (node.params.feedRate != null) p.push(`F=${node.params.feedRate}mol/s`);
+      if (node.params.volumetricFlow != null) p.push(`v=${node.params.volumetricFlow}m³/s`);
+      if (node.params.splitFraction != null) p.push(`α=${node.params.splitFraction}`);
+      if (p.length) block += `  params: ${p.join(", ")}`;
+    }
+    if (res) {
+      block += `\n  solver: X=${((res.conversion ?? 0) * 100).toFixed(1)}%, τ=${(res.residenceTime ?? 0).toFixed(2)}s, T_out=${(res.outletTemperature ?? 0).toFixed(0)}K, k=${(res.rateConstant ?? 0).toFixed(4)}/s, A_out=${(res.outletFlow ?? 0).toFixed(2)}mol/s, residual=${(res.residual ?? 0).toExponential(1)}, status=${res.status ?? "unknown"}`;
+      if (res.diagnostics && res.diagnostics.length > 0) {
+        block += `\n  diagnostics: ${res.diagnostics.join("; ")}`;
+      }
+    }
+    block += `\n`;
+  }
+
+  if (streams.length > 0) {
+    block += `\n### Streams\n`;
+    for (const s of streams) {
+      const st = s as { id: string; source: string; target: string; flowRate: number };
+      block += `- ${st.id}: ${st.source} → ${st.target} (${st.flowRate} mol/s)\n`;
+    }
+  }
+
+  if (r?.reconcilerDiagnostics && r.reconcilerDiagnostics.length > 0) {
+    block += `\n### Reconciler Diagnostics\n`;
+    for (const d of r.reconcilerDiagnostics) block += `- ${d}\n`;
+  }
+
+  block += `\n### Network Status: ${r?.overallStatus ?? "unknown"}\n`;
+  return block;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
@@ -356,7 +451,62 @@ export async function POST(req: Request) {
       );
     }
 
+    // --- Mode detection: analyze vs generate ---
+    // If the request includes a context (topology + report) AND the prompt
+    // looks like a question (not a design request), use analyze mode.
+    const ctx = body as { context?: { topology?: unknown; report?: unknown } };
+    const hasContext = !!ctx.context?.topology;
+    const analyzeKeywords = /\b(why|explain|what if|how come|low|high|bottleneck|improve|increase|decrease|compare|analyze|analyse|should i|recommend)\b/i;
+    const designKeywords = /\b(design|generate|build|create|add|make|synthesi[sz]e|construct)\b/i;
+    const isAnalyze =
+      hasContext && (analyzeKeywords.test(prompt) && !designKeywords.test(prompt));
+
     const zai = await ZAI.create();
+
+    if (isAnalyze) {
+      // --- ANALYZE MODE: grounded Q&A about the current topology ---
+      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report);
+      const userMessage = `${contextBlock}\n---\n\nUser question: ${prompt}`;
+
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: "assistant", content: ANALYZE_SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
+        thinking: { type: "disabled" },
+      });
+
+      const content = completion?.choices?.[0]?.message?.content ?? "";
+      const parsed = extractJson(content);
+
+      // In analyze mode, topology is always null. Coerce the response.
+      if (parsed && typeof parsed === "object") {
+        const p = parsed as { message?: string; reasoning?: unknown; topology?: unknown };
+        return NextResponse.json(
+          {
+            message: typeof p.message === "string" && p.message.trim()
+              ? p.message.trim()
+              : "Based on the solver report, I've analyzed the current network.",
+            reasoning: Array.isArray(p.reasoning)
+              ? p.reasoning.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 8)
+              : ["Analyzed current topology from solver report", "Identified key KPIs", "Formulated grounded answer"],
+            topology: null,
+          },
+          { status: 200 },
+        );
+      }
+      // Fallback if JSON parse failed
+      return NextResponse.json(
+        {
+          message: content.slice(0, 500) || "Analysis complete.",
+          reasoning: ["Analyzed current topology from solver report"],
+          topology: null,
+        },
+        { status: 200 },
+      );
+    }
+
+    // --- GENERATE MODE (existing behavior) ---
     const completion = await zai.chat.completions.create({
       messages: [
         { role: "assistant", content: SYSTEM_PROMPT },

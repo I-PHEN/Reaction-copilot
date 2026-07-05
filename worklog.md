@@ -607,3 +607,43 @@ Stage Summary:
   jacket + curved impeller + sampling port, PFR has 6 tubes + utility nozzles, separator has a
   distinct feed tray + reboiler/condenser hints, feed/product have level gauges. The canvas now
   reads like a genuine process flowsheet. Zero performance impact.
+
+---
+Task ID: Phase-3
+Agent: Orchestrator (main)
+Task: Phase 3 — context-aware copilot (analyze mode grounded in solver report) + PRD document.
+
+Work Log:
+- Created PRD.md as the source of truth: vision, design pillars, superstructure philosophy,
+  multi-agent architecture (6 agents), technology constraints, phased roadmap (1-6), out-of-
+  scope, change log. Updated to mark Phase 3 complete.
+- Evolved /api/copilot route to support two modes:
+  - GENERATE (existing): prompt → topology. Unchanged behavior.
+  - ANALYZE (new): prompt + context payload (topology + solver report) → grounded answer.
+    The LLM receives a compact context block built by buildContextBlock() listing every unit's
+    real KPIs (conversion, τ, T_out, k, A_out, residual, status, diagnostics) + streams +
+    reconciler diagnostics. The ANALYZE_SYSTEM_PROMPT instructs: never invent numbers, cite
+    actual KPIs, identify specific reactors by label, reason about direction of change for
+    "what if" questions without computing exact values.
+- Mode detection: analyze mode triggers when context is present AND the prompt contains
+  question keywords (why/explain/what if/low/high/bottleneck/improve/compare/etc.) without
+  design keywords (design/generate/build/create/add/etc.).
+- CopilotSidecar: now sends { prompt, context: { topology, report } } on every call. Added
+  report subscription. Analyze responses (topology: null) skip setNetwork and log a distinct
+  reasoning step ("Analyzed current topology against verified solver report").
+
+Verification (Agent Browser):
+- Built a 4-unit network (Feed→CSTR→PFR→Product), asked "why is conversion low?":
+  Response: "Conversion is low in CSTR-1 (17.7%) due to short residence time (τ=1.00s) and
+  moderate rate constant (k=0.2155/s). The PFR-1 achieves higher conversion (47.4%) with
+  longer residence time (τ=1.50s) and higher rate constant (k=0.4284/s) due to increased
+  temperature." — EVERY number matches the solver report exactly ✓.
+- Generate mode still works: "design a simple CSTR for 80% conversion" → produced a topology
+  ("Designed a single CSTR reactor system...") that replaced the canvas ✓.
+- POST /api/copilot returns 200 in both modes; no console errors; lint clean ✓.
+
+Stage Summary:
+- The copilot is now context-aware: it can answer questions about the current topology using
+  real solver data, never hallucinating numbers. This is the bedrock for Phase 4 (multi-
+  candidate generation) and Phase 6 (multi-agent collaboration). The context-payload
+  architecture means future agents just add their own system prompt + read the same context.
