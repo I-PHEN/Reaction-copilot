@@ -688,3 +688,48 @@ Stage Summary:
   alternatives, the user compares KPIs side-by-side, and loads the preferred one. The
   context-payload architecture means the multi mode is just another system prompt reading the
   same shared state — Phase 5 (optimizer) and Phase 6 (multi-agent) are additive.
+
+---
+Task ID: Phase-4.5
+Agent: Orchestrator (main)
+Task: Manual configuration dialog + stream UX + generalized n-th order solver. PRD updated with Phase 7 (DWSIM/MATLAB) + Phase 8 (pathway discovery) + nuclear out-of-scope.
+
+Work Log:
+- PRD: added Phase 7 (external computation backends — DWSIM, MATLAB via mini-services, not in
+  Next.js app) and Phase 8 (reaction pathway discovery — the north star). Added nuclear reactor
+  design to out-of-scope (different physics, separate product).
+- SOLVER GENERALIZATION (n-th order):
+  - NodeParams: added reactionOrder (n) + reactionExpression fields.
+  - kinetics.ts: added rateOfDisappearance(k, CA, n) = k·CA^n.
+  - cstr.ts: generalized to n-th order. For n=1 uses the analytic Da/(1+Da). For n≠1 uses
+    Newton-Raphson root-finding on f(X) = V·k·CA0^n·(1-X)^n - F_A0·X = 0 (100 iterations max).
+    Reports non-convergence as an error.
+  - pfr.ts: generalized the ODE rate function to dX/dV = k·CA0^n·(1-X)^n / F_A0. RK4 unchanged.
+- MANUAL CONFIGURATION:
+  - Store: added pendingConfigNodeId state + requestConfig(id)/dismissConfig() actions. addNode
+    now auto-opens the config dialog when a CSTR or PFR is added manually.
+  - ConfigurationDialog component: reaction presets (A→B 1st, 2A→B 2nd, A→products 0th, 3A→B
+    3rd), custom reaction expression input, reaction order input (with live rate-law display
+    "-rA = k·CA^n"), volume/temperature/A/Ea inputs. Uses a key-based ConfigForm remount to
+    avoid setState-in-effect (lint-compliant). Apply calls updateNodeParams → solver re-runs.
+  - Context menu: added "Configure…" option (opens the same dialog for existing reactors).
+- STREAM UX:
+  - Context menu: added "Connect to…" option. Selecting it enters connect mode — a cyan pill
+    at the top says "Click a target unit to connect" with an Esc cancel. Clicking any other
+    node creates the stream. Escape cancels connect mode.
+  - The existing drag-from-handle connection still works (React Flow default).
+
+Verification (Agent Browser):
+- Add CSTR → config dialog auto-opens with "Configure CSTR-1" ✓.
+- Select "2A → B (2nd order)" preset → order input shows 2 → Apply → dialog closes ✓.
+- 2nd-order CSTR solver converges: conversion 39.5% (vs 17.7% for 1st order at same volume —
+  correct, since 2nd order at CA0=5 has a higher rate) ✓.
+- Stream creation: addStream(feed→cstr), addStream(cstr→product) → 2 streams, full network
+  connected, stream table shows 1 stream ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- Manual engineering is now first-class: adding a reactor prompts for reaction + kinetics +
+  conditions. The solver handles arbitrary reaction orders (0th, 1st, 2nd, 3rd, fractional)
+  via Newton-Raphson for CSTR and generalized RK4 for PFR. Stream creation works via drag
+  OR the "Connect to…" context-menu mode. The tool is no longer limited to first-order A→B.

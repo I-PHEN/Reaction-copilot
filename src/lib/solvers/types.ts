@@ -32,6 +32,10 @@ export interface NodeParams {
   preExponential: number;
   /** Activation energy [J/mol]. */
   activationEnergy: number;
+  /** Reaction order w.r.t. A (n in -rA = k·CA^n). Default 1. */
+  reactionOrder: number;
+  /** Reaction expression, e.g. "A → B", "2A → B", "A + B → C". */
+  reactionExpression: string;
 }
 
 export interface NetworkNode {
@@ -100,6 +104,8 @@ export const DEFAULT_PARAMS: NodeParams = {
   splitFraction: 0.85,
   preExponential: 1.2e10,
   activationEnergy: 72000,
+  reactionOrder: 1,
+  reactionExpression: "A → B",
 };
 
 /** Universal gas constant [J/(mol·K)]. */

@@ -29,7 +29,10 @@ export function solvePFR(
     volumetricFlow: v0,
     preExponential: A,
     activationEnergy: Ea,
+    reactionOrder: n,
   } = params;
+
+  const order = n ?? 1;
 
   if (v0 <= 0) diagnostics.push("Volumetric flow <= 0: undefined residence time");
   if (CA0 <= 0) diagnostics.push("Inlet concentration <= 0: no reactant to convert");
@@ -38,8 +41,13 @@ export function solvePFR(
   const k = rateConstant(A, Ea, temperature);
   const F_A0 = v0 * CA0;
 
-  // dX/dV = k * CA0 * (1 - X) / F_A0  =  k * (1 - X) / v0
-  const dXdV = (X: number) => (v0 > 0 ? (k * (1 - X)) / v0 : 0);
+  // Generalized n-th order: dX/dV = k * CA0^n * (1-X)^n / F_A0
+  // For n=1 this reduces to k*(1-X)/v0 (since F_A0 = v0*CA0).
+  const dXdV = (X: number) => {
+    if (v0 <= 0 || F_A0 <= 0) return 0;
+    const CA = CA0 * (1 - X);
+    return (k * Math.pow(CA, order)) / F_A0;
+  };
 
   let X = 0;
   const profile: SolverResult["profile"] = [];

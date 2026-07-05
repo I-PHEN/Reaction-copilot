@@ -1,15 +1,19 @@
 /**
  * Reaction Kinetics
  * ---------------------------------------------------------------
- * First-order, irreversible, liquid-phase kinetics:  A -> products
+ * Irreversible, liquid-phase kinetics with arbitrary reaction order:
+ *     A -> products
  * Rate constant follows the Arrhenius equation:
  *     k(T) = A * exp(-Ea / (R * T))
- * Rate law:  -rA = k * CA
+ * Rate law (n-th order w.r.t. A):
+ *     -rA = k * CA^n
+ *
+ * For n=1 this reduces to the classic first-order law. For n≠1 the
+ * CSTR design equation requires numerical root-finding (see cstr.ts).
  *
  * For the exothermic reaction we apply a lumped adiabatic temperature
  * rise so the solver can report an outlet temperature without
- * requiring a full energy balance solve. This keeps the verified
- * solver self-contained and deterministic.
+ * requiring a full energy balance solve.
  */
 import { R_GAS } from "./types";
 
@@ -22,6 +26,19 @@ export function rateConstant(
   if (!Number.isFinite(temperature) || temperature <= 0) return 0;
   if (!Number.isFinite(preExponential) || preExponential <= 0) return 0;
   return preExponential * Math.exp(-activationEnergy / (R_GAS * temperature));
+}
+
+/**
+ * Rate of disappearance of A: -rA = k * CA^n  [mol/(m³·s)].
+ * CA is the local concentration of A [mol/m³], n is the reaction order.
+ */
+export function rateOfDisappearance(
+  k: number,
+  CA: number,
+  order: number,
+): number {
+  if (CA <= 0) return 0;
+  return k * Math.pow(CA, order);
 }
 
 /** Adiabatic outlet temperature for a given conversion (lumped model). */
@@ -37,7 +54,8 @@ export function adiabaticOutletTemperature(
 
 /**
  * Damköhler number for a first-order reaction in a flow reactor.
- * Da = k * tau, where tau = V / v0.
+ * Da = k * tau, where tau = V / v0. (First-order only; for n≠1 the
+ * CSTR solver uses a generalized design equation.)
  */
 export function damkohler(
   k: number,

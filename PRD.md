@@ -146,13 +146,31 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 
 - Full MINLP superstructure solving (browser constraint)
 - A database / accounts / multi-device sync (deferred until a real need)
-- Real chemistry beyond first-order A→B (extend the solver layer when needed)
 - Real-time collaboration / multi-user editing
 - Mobile-native app (responsive web only)
+- **Nuclear reactor design** — entirely different physics (neutron transport, burnup, thermal-hydraulics). This product is chemical reaction engineering only. Nuclear would be a separate venture.
 
-## 9. Change Log
+## 9. Future Milestones (beyond Phase 6)
+
+### Phase 7 — External Computation Backends (DWSIM, MATLAB)
+**Goal:** Offload rigorous computation to external engines via a compute backend, so the AI can leverage full mass-energy balances, flash calculations, and advanced numerics.
+
+**Architecture:** A separate mini-service (or set of services) that the Next.js API calls when it needs computation beyond the browser solver. The browser app stays thin; compute is offloaded.
+
+- **DWSIM** (open-source Aspen-like flowsheet simulator, .NET): full mass-energy balance, flash, rigorous property models, CAPE-OPEN unit operations
+- **MATLAB** (via mini-service or MCP): `ode45`, optimization toolboxes, control-system design, advanced numerics
+- These are server-side integrations, likely Dockerized. They do NOT live in the Next.js app directly.
+
+### Phase 8 — Reaction Pathway Discovery
+**Goal:** The north star — the AI proposes and evaluates novel reaction pathways with verified economics, at lower cost than experimental screening.
+
+- Combines: generalized solver (Phase 5) + property agent (Phase 5.5) + multi-agent reasoning (Phase 6) + external compute (Phase 7)
+- The AI explores reaction networks the user hasn't considered, validates them with solvers + DWSIM, and ranks by yield/selectivity/economics
+
+## 10. Change Log
 
 - **Phase 1 complete** — empty-state, undo/redo, stream table
 - **Phase 2 complete** — equipment glyph refinement
 - **Phase 3 complete** — context-aware copilot (analyze mode grounded in solver report)
 - **Phase 4 complete** — multi-candidate generation (superstructure-style search, comparison panel)
+- **Phase 4.5 complete** — manual configuration dialog + stream UX + generalized n-th order solver

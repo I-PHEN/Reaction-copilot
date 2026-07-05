@@ -100,6 +100,11 @@ interface TopologyState {
   candidates: { label: string; rationale: string; topology: ReactorNetwork; report: SolverReport | null }[];
   setCandidates: (cands: { label: string; rationale: string; topology: ReactorNetwork }[]) => void;
   clearCandidates: () => void;
+
+  // --- manual configuration dialog (Phase 4.5) ---
+  pendingConfigNodeId: string | null;
+  requestConfig: (id: string) => void;
+  dismissConfig: () => void;
 }
 
 const seedNetwork = (): ReactorNetwork => {
@@ -155,8 +160,8 @@ const seedNetwork = (): ReactorNetwork => {
 
 const nodeDefaults: Record<NodeType, Partial<NetworkNode["params"]>> = {
   feed: { feedRate: 10, inletConcentration: 5, volumetricFlow: 2, temperature: 350 },
-  cstr: { volume: 2, temperature: 350, preExponential: DEFAULT_PARAMS.preExponential, activationEnergy: DEFAULT_PARAMS.activationEnergy },
-  pfr: { volume: 3, temperature: 360, preExponential: DEFAULT_PARAMS.preExponential, activationEnergy: DEFAULT_PARAMS.activationEnergy },
+  cstr: { volume: 2, temperature: 350, preExponential: DEFAULT_PARAMS.preExponential, activationEnergy: DEFAULT_PARAMS.activationEnergy, reactionOrder: 1, reactionExpression: "A → B" },
+  pfr: { volume: 3, temperature: 360, preExponential: DEFAULT_PARAMS.preExponential, activationEnergy: DEFAULT_PARAMS.activationEnergy, reactionOrder: 1, reactionExpression: "A → B" },
   mixer: { volume: 0.5, temperature: 350 },
   separator: { splitFraction: 0.85, temperature: 350 },
   product: { temperature: 350 },
@@ -197,6 +202,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   canUndo: false,
   canRedo: false,
   candidates: [],
+  pendingConfigNodeId: null,
 
   setNetwork: (n) => {
     pushHistory(get().network);
@@ -243,6 +249,10 @@ export const useTopology = create<TopologyState>((set, get) => ({
     };
     set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] }, canUndo: true, canRedo: false }));
     get().runSolvers();
+    // Auto-open the configuration dialog for manually-added reactors.
+    if (type === "cstr" || type === "pfr") {
+      set({ pendingConfigNodeId: id });
+    }
     return id;
   },
 
@@ -483,6 +493,10 @@ export const useTopology = create<TopologyState>((set, get) => ({
   },
 
   clearCandidates: () => set({ candidates: [] }),
+
+  // --- manual configuration dialog (Phase 4.5) ---
+  requestConfig: (id) => set({ pendingConfigNodeId: id }),
+  dismissConfig: () => set({ pendingConfigNodeId: null }),
 }));
 
 // --- localStorage helpers for the topology library ---

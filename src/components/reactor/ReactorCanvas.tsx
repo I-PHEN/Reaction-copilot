@@ -20,7 +20,7 @@ import "@xyflow/react/dist/style.css";
 import { ReactorNode, type ReactorNodeData } from "./nodes/ReactorNode";
 import { StreamEdge } from "./StreamEdge";
 import { useTopology } from "@/lib/store/topology";
-import { Plus, Trash2, Inspect, Copy, Pin, Network, Undo2, Redo2 } from "lucide-react";
+import { Plus, Trash2, Inspect, Copy, Pin, Network, Undo2, Redo2, Share2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -99,11 +99,25 @@ function CanvasInner() {
   const removeStream = useTopology((s) => s.removeStream);
   const inspectNode = useTopology((s) => s.inspectNode);
   const togglePin = useTopology((s) => s.togglePin);
+  const requestConfig = useTopology((s) => s.requestConfig);
   const undo = useTopology((s) => s.undo);
   const redo = useTopology((s) => s.redo);
   const canUndo = useTopology((s) => s.canUndo);
   const canRedo = useTopology((s) => s.canRedo);
   const reactFlow = useReactFlow();
+  const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
+
+  // "Connect to..." mode: after selecting Connect from the context menu,
+  // the next node click creates a stream from the source to that target.
+  const handleNodeClickForConnect = useCallback(
+    (nodeId: string) => {
+      if (connectSourceId && connectSourceId !== nodeId) {
+        connectNodes(connectSourceId, nodeId);
+        setConnectSourceId(null);
+      }
+    },
+    [connectSourceId, connectNodes],
+  );
 
   // Keyboard shortcuts:
   //   Ctrl/Cmd + = / - / 0  → zoom in / out / fit
@@ -135,6 +149,8 @@ function CanvasInner() {
       } else if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId) {
         e.preventDefault();
         removeNode(selectedNodeId);
+      } else if (e.key === "Escape") {
+        setConnectSourceId(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -214,7 +230,13 @@ function CanvasInner() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeClick={(_, n) => selectNode(n.id)}
+          onNodeClick={(_, n) => {
+          if (connectSourceId) {
+            handleNodeClickForConnect(n.id);
+          } else {
+            selectNode(n.id);
+          }
+        }}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeContextMenu={(e, n) => {
             e.preventDefault();
@@ -277,6 +299,24 @@ function CanvasInner() {
             </Panel>
           )}
 
+          {/* Connect-mode indicator — shows when "Connect to..." is active */}
+          {connectSourceId && (
+            <Panel position="top-center" className="!m-0 !w-full">
+              <div className="flex justify-center pt-3">
+                <div className="flex items-center gap-2 rounded-full border border-cyan-500/40 bg-zinc-900/95 px-3 py-1.5 text-[11px] text-cyan-300 shadow-lg backdrop-blur">
+                  <Share2 className="h-3 w-3" />
+                  Click a target unit to connect
+                  <button
+                    onClick={() => setConnectSourceId(null)}
+                    className="ml-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                  >
+                    Esc
+                  </button>
+                </div>
+              </div>
+            </Panel>
+          )}
+
           {/* Empty-state prompt — centered when no nodes exist */}
           {network.nodes.length === 0 && (
             <Panel position="top-center" className="!m-0 !w-full">
@@ -315,6 +355,18 @@ function CanvasInner() {
           >
             <Inspect className="h-3.5 w-3.5 text-cyan-400" /> Inspect
             <span className="ml-auto font-mono text-[9px] text-zinc-600">dbl-click</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && requestConfig(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] focus:bg-zinc-800"
+          >
+            <Settings className="h-3.5 w-3.5 text-zinc-400" /> Configure…
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => selectedNodeId && setConnectSourceId(selectedNodeId)}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-[12px] focus:bg-zinc-800"
+          >
+            <Share2 className="h-3.5 w-3.5 text-cyan-400" /> Connect to…
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => selectedNodeId && duplicateNode(selectedNodeId)}
