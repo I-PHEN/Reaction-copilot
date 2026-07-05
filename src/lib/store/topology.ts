@@ -83,6 +83,12 @@ interface TopologyState {
   runSolvers: () => void;
   serialize: () => ReactorNetwork;
 
+  // --- undo / redo ---
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+
   // --- session management ---
   clearSession: () => void;
   saveTopology: (name: string) => void;
@@ -154,24 +160,46 @@ const nodeDefaults: Record<NodeType, Partial<NetworkNode["params"]>> = {
 const labelFor = (type: NodeType, existing: number) =>
   `${type.toUpperCase()}-${existing + 1}`;
 
+// --- Undo/Redo history ---
+// Tracks network snapshots (nodes + streams + meta). Position-only drags
+// are NOT recorded (updateNodePosition doesn't call pushHistory) so the
+// stack stays manageable. Capped at 50 entries.
+const HISTORY_LIMIT = 50;
+const past: ReactorNetwork[] = [];
+const future: ReactorNetwork[] = [];
+
+function snapshot(network: ReactorNetwork): ReactorNetwork {
+  return JSON.parse(JSON.stringify(network));
+}
+
+function pushHistory(network: ReactorNetwork) {
+  past.push(snapshot(network));
+  if (past.length > HISTORY_LIMIT) past.shift();
+  future.length = 0;
+}
+
 export const useTopology = create<TopologyState>((set, get) => ({
-  network: seedNetwork(),
+  network: { nodes: [], streams: [], meta: { species: "A → B", reaction: "A → B (first-order, liquid-phase)" } },
   report: null,
-  selectedNodeId: "cstr-1",
-  inspectedNodeId: "cstr-1",
+  selectedNodeId: null,
+  inspectedNodeId: null,
   pinnedNodeIds: [],
   copilotMessages: [],
   reasoning: [],
   isGenerating: false,
   isSolving: false,
   savedTopologies: loadSavedList(),
+  canUndo: false,
+  canRedo: false,
 
   setNetwork: (n) => {
-    set({ network: n, selectedNodeId: n.nodes[0]?.id ?? null });
+    pushHistory(get().network);
+    set({ network: n, selectedNodeId: null, inspectedNodeId: null, pinnedNodeIds: [], canUndo: true, canRedo: false });
     get().runSolvers();
   },
 
   updateNodeParams: (id, params) => {
+    pushHistory(get().network);
     set((s) => ({
       network: {
         ...s.network,
@@ -179,6 +207,8 @@ export const useTopology = create<TopologyState>((set, get) => ({
           n.id === id ? { ...n, params: { ...n.params, ...params } } : n,
         ),
       },
+      canUndo: true,
+      canRedo: false,
     }));
     get().runSolvers();
   },
@@ -195,6 +225,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   },
 
   addNode: (type, position) => {
+    pushHistory(get().network);
     const id = nextId(type.slice(0, 1));
     const count = get().network.nodes.filter((n) => n.type === type).length;
     const node: NetworkNode = {
@@ -204,12 +235,13 @@ export const useTopology = create<TopologyState>((set, get) => ({
       position: position ?? { x: 400 + Math.random() * 200, y: 120 + Math.random() * 280 },
       params: nodeDefaults[type],
     };
-    set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] } }));
+    set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] }, canUndo: true, canRedo: false }));
     get().runSolvers();
     return id;
   },
 
   duplicateNode: (id) => {
+    pushHistory(get().network);
     const src = get().network.nodes.find((n) => n.id === id);
     if (!src) return id;
     const newId = nextId(src.type.slice(0, 1));
@@ -221,12 +253,13 @@ export const useTopology = create<TopologyState>((set, get) => ({
       position: { x: src.position.x + 60, y: src.position.y + 60 },
       params: { ...src.params },
     };
-    set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] } }));
+    set((s) => ({ network: { ...s.network, nodes: [...s.network.nodes, node] }, canUndo: true, canRedo: false }));
     get().runSolvers();
     return newId;
   },
 
   removeNode: (id) => {
+    pushHistory(get().network);
     set((s) => ({
       network: {
         ...s.network,
@@ -236,24 +269,32 @@ export const useTopology = create<TopologyState>((set, get) => ({
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
       inspectedNodeId: s.inspectedNodeId === id ? null : s.inspectedNodeId,
       pinnedNodeIds: s.pinnedNodeIds.filter((p) => p !== id),
+      canUndo: true,
+      canRedo: false,
     }));
     get().runSolvers();
   },
 
   addStream: (source, target) => {
+    pushHistory(get().network);
     const id = nextId("s");
     set((s) => ({
       network: {
         ...s.network,
         streams: [...s.network.streams, { id, source, target, flowRate: 8 }],
       },
+      canUndo: true,
+      canRedo: false,
     }));
     get().runSolvers();
   },
 
   removeStream: (id) => {
+    pushHistory(get().network);
     set((s) => ({
       network: { ...s.network, streams: s.network.streams.filter((st) => st.id !== id) },
+      canUndo: true,
+      canRedo: false,
     }));
     get().runSolvers();
   },
@@ -339,13 +380,44 @@ export const useTopology = create<TopologyState>((set, get) => ({
     return JSON.parse(JSON.stringify(n)) as ReactorNetwork;
   },
 
+  // --- undo / redo ---
+  undo: () => {
+    const prev = past.pop();
+    if (!prev) return;
+    future.push(snapshot(get().network));
+    set({
+      network: prev,
+      selectedNodeId: null,
+      inspectedNodeId: null,
+      pinnedNodeIds: [],
+      canUndo: past.length > 0,
+      canRedo: true,
+    });
+    get().runSolvers();
+  },
+
+  redo: () => {
+    const next = future.pop();
+    if (!next) return;
+    past.push(snapshot(get().network));
+    set({
+      network: next,
+      selectedNodeId: null,
+      inspectedNodeId: null,
+      pinnedNodeIds: [],
+      canUndo: true,
+      canRedo: future.length > 0,
+    });
+    get().runSolvers();
+  },
+
   // --- session management ---
   clearSession: () => {
     set({
-      network: seedNetwork(),
+      network: { nodes: [], streams: [], meta: { species: "A → B", reaction: "A → B (first-order, liquid-phase)" } },
       report: null,
-      selectedNodeId: "cstr-1",
-      inspectedNodeId: "cstr-1",
+      selectedNodeId: null,
+      inspectedNodeId: null,
       pinnedNodeIds: [],
       copilotMessages: [],
       reasoning: [],

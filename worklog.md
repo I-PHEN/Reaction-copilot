@@ -529,3 +529,42 @@ Stage Summary:
 - Full session management: start fresh (New), persist topologies to localStorage (Library →
   Save), restore them anytime (Library → click entry), and remove unwanted saves (hover
   delete). All with toast feedback. Topologies survive page reloads and browser restarts.
+
+---
+Task ID: Phase-1
+Agent: Orchestrator (main)
+Task: Phase 1 foundation — empty-state canvas, undo/redo, stream table.
+
+Work Log:
+- EMPTY-STATE CANVAS: removed the forced seed network. The store now initializes with an empty
+  network (nodes: [], streams: []). clearSession() also resets to empty (not seed). Added a
+  centered empty-state prompt on the canvas: "Start a reactor network" + 4 quick-add buttons
+  (FEED/CSTR/PFR/SEPARATOR). The discoverability hint only shows when nodes exist. setNetwork
+  no longer auto-selects/inspects — the user chooses what to inspect.
+- UNDO/REDO: added a history stack (past[]/future[] arrays, capped at 50). pushHistory() is
+  called inside every mutating action: setNetwork, updateNodeParams, addNode, duplicateNode,
+  removeNode, addStream, removeStream. Position drags (updateNodePosition) are NOT recorded
+  so the stack stays manageable. undo()/redo() swap between stacks and re-run solvers. Added
+  canUndo/canRedo state for button enabling. Keyboard: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z
+  or Ctrl+Y = redo (guarded against textarea/input focus). Undo2/Redo2 buttons added to the
+  canvas top-right toolbar with a divider separating them from add/delete.
+- STREAM TABLE: new collapsible component above the reconciler footer. Shows every stream with
+  columns: Stream ID, From→To, Flow (mol/s), A%, B%, Temperature (K). Composition computed
+  from solver outletFlow for reactors (A consumed by reaction) vs declared stream flow for
+  non-reactors. Collapses to a single "STREAM TABLE · N streams" header line to reclaim
+  vertical space. Dark zinc styling, sticky header, monospace numerics, hover row highlight.
+
+Verification (Agent Browser):
+- Empty state: 0 nodes on load, "Start a reactor network" prompt + 4 quick-add buttons ✓.
+- Undo: addNode → canUndo=true → undo → 0 nodes; redo → 1 node ✓. Keyboard Ctrl+Z works
+  with canvas focus (2→1 nodes) ✓.
+- Stream table: 3 streams shown — Feed→CSTR (100%A/0%B/350K), CSTR→PFR (100%A/0%B/358K),
+  PFR→Product (66%A/34%B/381K) ✓. Composition bounded 0-100% ✓.
+- Undo/Redo buttons in toolbar (Undo enabled, Redo disabled when stack empty) ✓.
+- No console errors; layout holds (rootScrollH=900=viewportH); lint clean ✓.
+
+Stage Summary:
+- Phase 1 complete: canvas starts empty with a proper empty state, full undo/redo (keyboard
+  + buttons) on all topology/parameter mutations, and a collapsible stream table that makes
+  the network read like a real process flowsheet. Foundation is solid for Phase 2 (equipment
+  glyph polish) and Phase 3 (copilot intelligence).

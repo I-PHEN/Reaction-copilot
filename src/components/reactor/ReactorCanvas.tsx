@@ -20,7 +20,7 @@ import "@xyflow/react/dist/style.css";
 import { ReactorNode, type ReactorNodeData } from "./nodes/ReactorNode";
 import { StreamEdge } from "./StreamEdge";
 import { useTopology } from "@/lib/store/topology";
-import { Plus, Trash2, Inspect, Copy, Pin, Network } from "lucide-react";
+import { Plus, Trash2, Inspect, Copy, Pin, Network, Undo2, Redo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -98,10 +98,16 @@ function CanvasInner() {
   const removeStream = useTopology((s) => s.removeStream);
   const inspectNode = useTopology((s) => s.inspectNode);
   const togglePin = useTopology((s) => s.togglePin);
+  const undo = useTopology((s) => s.undo);
+  const redo = useTopology((s) => s.redo);
+  const canUndo = useTopology((s) => s.canUndo);
+  const canRedo = useTopology((s) => s.canRedo);
   const reactFlow = useReactFlow();
 
-  // Keyboard zoom: Ctrl/Cmd + = / - / 0
-  // Keyboard delete: Delete / Backspace removes the selected node.
+  // Keyboard shortcuts:
+  //   Ctrl/Cmd + = / - / 0  → zoom in / out / fit
+  //   Ctrl/Cmd + Z           → undo   |  Ctrl/Cmd + Shift + Z (or Ctrl+Y) → redo
+  //   Delete / Backspace     → remove selected node
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -118,6 +124,13 @@ function CanvasInner() {
       } else if (mod && e.key === "0") {
         e.preventDefault();
         reactFlow.fitView({ duration: 300, padding: 0.25 });
+      } else if (mod && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (mod && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        redo();
       } else if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId) {
         e.preventDefault();
         removeNode(selectedNodeId);
@@ -125,7 +138,7 @@ function CanvasInner() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [reactFlow, selectedNodeId, removeNode]);
+  }, [reactFlow, selectedNodeId, removeNode, undo, redo]);
 
   const nodes = useMemo<Node<ReactorNodeData>[]>(
     () =>
@@ -222,9 +235,26 @@ function CanvasInner() {
             showInteractive={false}
           />
 
-          {/* Single top-right control cluster: add-unit + delete */}
+          {/* Top-right control cluster: undo/redo + add-unit + delete */}
           <Panel position="top-right" className="!m-3">
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700/60 bg-zinc-900/80 text-zinc-300 backdrop-blur transition-colors hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700/60 bg-zinc-900/80 text-zinc-300 backdrop-blur transition-colors hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </button>
+              <div className="mx-0.5 h-5 w-px bg-zinc-800" />
               <AddUnitButton />
               <button
                 onClick={() => selectedNodeId && removeNode(selectedNodeId)}
@@ -237,11 +267,38 @@ function CanvasInner() {
             </div>
           </Panel>
 
-          {/* Subtle discoverability hint — only when nothing is inspected */}
-          {!inspectedNodeId && (
+          {/* Subtle discoverability hint — only when nothing is inspected and canvas has nodes */}
+          {network.nodes.length > 0 && !inspectedNodeId && (
             <Panel position="top-left" className="!m-3">
               <div className="rounded-md border border-zinc-800/60 bg-zinc-900/70 px-2.5 py-1 font-mono text-[10px] text-zinc-600 backdrop-blur">
                 double-click a unit to inspect · right-click for options
+              </div>
+            </Panel>
+          )}
+
+          {/* Empty-state prompt — centered when no nodes exist */}
+          {network.nodes.length === 0 && (
+            <Panel position="top-center" className="!m-0 !w-full">
+              <div className="flex flex-col items-center gap-3 pt-[18vh]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900/80 ring-1 ring-zinc-800">
+                  <Network className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div className="text-center">
+                  <div className="text-sm font-medium text-zinc-300">Start a reactor network</div>
+                  <div className="text-[11px] text-zinc-600">Add your first unit, or ask the copilot to design one.</div>
+                </div>
+                <div className="flex gap-1.5">
+                  {(["feed", "cstr", "pfr", "separator"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => addNode(t)}
+                      className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
+                    >
+                      <Plus className="h-3 w-3" />
+                      {t.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
               </div>
             </Panel>
           )}

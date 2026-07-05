@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ReactorCanvas } from "@/components/reactor/ReactorCanvas";
 import { CopilotSidecar } from "@/components/reactor/CopilotSidecar";
 import { DeepDiveOverlay } from "@/components/reactor/DeepDiveOverlay";
+import { StreamTable } from "@/components/reactor/StreamTable";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   DropdownMenu,
@@ -319,6 +320,7 @@ export default function Page() {
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>
+      <StreamTable />
       <ReconcilerBar />
     </div>
   );
