@@ -5,6 +5,7 @@ import { ReactorCanvas } from "@/components/reactor/ReactorCanvas";
 import { CopilotSidecar } from "@/components/reactor/CopilotSidecar";
 import { DeepDiveOverlay } from "@/components/reactor/DeepDiveOverlay";
 import { StreamTable } from "@/components/reactor/StreamTable";
+import { CandidateComparison } from "@/components/reactor/CandidateComparison";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   DropdownMenu,
@@ -320,6 +321,7 @@ export default function Page() {
           </ResizablePanel>
         </ResizablePanelGroup>
       </main>
+      <CandidateComparison />
       <StreamTable />
       <ReconcilerBar />
     </div>

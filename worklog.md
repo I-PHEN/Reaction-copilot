@@ -647,3 +647,44 @@ Stage Summary:
   real solver data, never hallucinating numbers. This is the bedrock for Phase 4 (multi-
   candidate generation) and Phase 6 (multi-agent collaboration). The context-payload
   architecture means future agents just add their own system prompt + read the same context.
+
+---
+Task ID: Phase-4
+Agent: Orchestrator (main)
+Task: Phase 4 — multi-candidate generation (superstructure-style search) + PRD Phase 5.5 (Property Agent).
+
+Work Log:
+- Updated PRD with Phase 5.5 (Property Agent / literature lookup via NIST/PubChem) — the "fills
+  in the gap" capability for real physical properties, deferred to after Phase 5.
+- Added MULTI_SYSTEM_PROMPT + generate-multi mode to /api/copilot. Produces 2 distinct candidate
+  topologies per request (e.g. single CSTR vs single PFR) with explicit schema, lowercase type
+  enforcement, and minimal-topology instructions to reduce LLM output size.
+- Extracted sanitizeTopology() from sanitizeEnvelope() so each candidate's nested topology is
+  validated independently.
+- Hardened extractJson() with 3-tier repair: direct parse → slice between first {/last } → fix
+  trailing commas + auto-close unbalanced braces. Handles common LLM JSON malformations.
+- Added 3-attempt retry loop in multi mode: if JSON parsing fails, re-prompts the LLM with a
+  "your previous response was not valid JSON" nudge. Compensates for non-deterministic malformed
+  output on large multi-candidate responses.
+- Store: added candidates[] state (each with label/rationale/topology/report), setCandidates()
+  runs the verified solver on each candidate so KPIs are real, clearCandidates().
+- CandidateComparison panel: slides in below the canvas (framer-motion) with side-by-side KPI
+  cards (conversion %, total volume, unit count, status badge). Each card has a rationale +
+  "Load to canvas" button that applies that candidate and dismisses the panel.
+- CopilotSidecar: multi-keyword detection ("alternatives", "compare", "different ways", "ways to")
+  takes precedence over analyze. Routes to multi mode, streams reasoning, then surfaces the
+  comparison panel. CopilotResponse type updated with mode + candidates fields.
+
+Verification (Agent Browser):
+- "give me 2 alternatives to achieve 90% conversion of A to B" → Candidate Comparison panel
+  appears with 2 candidates: "Single CSTR Network" and "Single PFR", each with solver-verified
+  KPIs (Conv, Vol, Units, Status) ✓.
+- Clicking "Load to canvas" applies the candidate topology (3 nodes: feed+CSTR+product) and
+  clears the candidates panel ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- First taste of superstructure-style search: the synthesizer proposes multiple verified
+  alternatives, the user compares KPIs side-by-side, and loads the preferred one. The
+  context-payload architecture means the multi mode is just another system prompt reading the
+  same shared state — Phase 5 (optimizer) and Phase 6 (multi-agent) are additive.

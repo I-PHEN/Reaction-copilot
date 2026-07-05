@@ -116,6 +116,69 @@ Respond with a single JSON object, NOTHING else:
 
 No extra text, no markdown, no code fences.`;
 
+/**
+ * Multi-candidate system prompt. The synthesizer produces 2-3 distinct
+ * candidate topologies for the same goal, each using a different
+ * configuration strategy. This is the first taste of superstructure-style
+ * search: generate alternatives, let the solver verify each, compare.
+ */
+const MULTI_SYSTEM_PROMPT = `You are REACTOR-COPILOT, an expert chemical-reaction-engineering assistant in MULTI-CANDIDATE mode. The user wants 2-3 DIFFERENT reactor network topologies for the same goal.
+
+You MUST respond with a single JSON object (no markdown, no code fences, no commentary). The EXACT schema:
+
+{
+  "message": string,
+  "reasoning": string[],
+  "candidates": [
+    {
+      "label": string,
+      "rationale": string,
+      "topology": {
+        "nodes": [
+          {
+            "id": string,
+            "type": "feed" | "cstr" | "pfr" | "mixer" | "separator" | "product",
+            "label": string,
+            "position": { "x": number, "y": number },
+            "params": {
+              "volume": number,
+              "temperature": number,
+              "feedRate": number,
+              "inletConcentration": number,
+              "volumetricFlow": number,
+              "splitFraction": number,
+              "preExponential": number,
+              "activationEnergy": number
+            }
+          }
+        ],
+        "streams": [
+          { "id": string, "source": string, "target": string, "flowRate": number }
+        ],
+        "meta": { "species": "A -> B", "reaction": "A -> B (first-order, liquid-phase)" }
+      }
+    }
+  ]
+}
+
+CRITICAL RULES:
+- Node "type" values MUST be lowercase: "feed", "cstr", "pfr", "mixer", "separator", "product". NEVER "CSTR" or "PFR".
+- Every node MUST have an "id" (e.g. "n1", "n2"), a "label", a "position" with x/y numbers, and a "params" object.
+- Reactor nodes (cstr/pfr) MUST include: volume (1-5 m³), temperature (320-400 K), preExponential (12000000000), activationEnergy (72000).
+- Feed nodes MUST include: feedRate (5-15 mol/s), inletConcentration (5 mol/m³), volumetricFlow (1-3 m³/s), temperature (320-400 K).
+- Product nodes: empty params {}.
+- Every stream's "source" and "target" MUST reference an existing node id.
+- Use distinct node ids per candidate (n1, n2, n3...) and stream ids (s1, s2...).
+- Layout: feed at x~40, reactors x~300-700, product x~1000-1200. Stagger y to avoid overlap.
+- Default kinetics: preExponential = 12000000000 (1.2e10), activationEnergy = 72000.
+- Each candidate MUST be a COMPLETE network: at least one feed, one reactor, one product, connected by streams.
+- Keep topologies MINIMAL: feed + 1-2 reactors + product. Do NOT add extra fields like "advantages", "disadvantages", "conversion" — only the fields in the schema above.
+- Output ONLY valid JSON. No comments, no trailing commas, no extra text.
+
+Generate 2 genuinely different candidates (e.g. single CSTR, single PFR).
+
+OUTPUT: a single JSON object, nothing else.`;
+
 const NODE_TYPES: ReadonlySet<string> = new Set<NodeType>([
   "feed",
   "cstr",
@@ -266,42 +329,57 @@ function buildFallback(reason: string): {
 function extractJson(content: string): unknown | null {
   if (!content) return null;
   let text = content.trim();
-  const fence = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
-  const m = text.match(fence);
-  if (m) text = m[1].trim();
+  // Strip markdown code fences from both ends.
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?\s*/i, "").trim();
+  }
+  if (text.endsWith("```")) {
+    text = text.replace(/\s*```$/i, "").trim();
+  }
+  // Attempt 1: direct parse.
   try {
     return JSON.parse(text);
   } catch {
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      const slice = text.slice(start, end + 1);
-      try {
-        return JSON.parse(slice);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    // pass
   }
+  // Attempt 2: slice between first '{' and last '}'.
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const slice = text.slice(start, end + 1);
+    try {
+      return JSON.parse(slice);
+    } catch {
+      // pass
+    }
+    // Attempt 3: fix common LLM JSON errors (trailing commas, truncated arrays).
+    let fixed = slice
+      .replace(/,\s*([}\]])/g, "$1") // trailing commas before } or ]
+      .replace(/,\s*$/m, ""); // trailing comma at end
+    // If truncated (unbalanced braces), try to close them.
+    const opens = (fixed.match(/[{[]/g) || []).length;
+    const closes = (fixed.match(/[}\]]/g) || []).length;
+    if (opens > closes) {
+      fixed += "}]".repeat(opens - closes);
+    }
+    try {
+      return JSON.parse(fixed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
-function sanitizeEnvelope(raw: unknown): {
-  message: string;
-  reasoning: string[];
-  topology: ReactorNetwork;
-} | null {
+/** Sanitize a raw topology object (nodes/streams/meta) directly. */
+function sanitizeTopology(raw: unknown): ReactorNetwork | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const topologyRaw = r.topology;
-  if (!topologyRaw || typeof topologyRaw !== "object") return null;
-  const t = topologyRaw as Record<string, unknown>;
+  const t = raw as Record<string, unknown>;
   const nodesRaw = Array.isArray(t.nodes) ? t.nodes : [];
   const streamsRaw = Array.isArray(t.streams) ? t.streams : [];
   const metaRaw =
     t.meta && typeof t.meta === "object" ? (t.meta as Record<string, unknown>) : {};
 
-  // Sanitize nodes; de-duplicate ids (rename collisions to fallback id).
   const nodes: NetworkNode[] = [];
   const seenIds = new Set<string>();
   for (let i = 0; i < nodesRaw.length; i++) {
@@ -315,7 +393,6 @@ function sanitizeEnvelope(raw: unknown): {
   }
   if (nodes.length === 0) return null;
 
-  // Sanitize streams; silently drop streams referencing unknown nodes.
   const streams: Stream[] = [];
   const seenStreamIds = new Set<string>();
   for (let i = 0; i < streamsRaw.length; i++) {
@@ -338,14 +415,28 @@ function sanitizeEnvelope(raw: unknown): {
       ? metaRaw.reaction.trim()
       : "A -> B (first-order, liquid-phase)";
 
+  return { nodes, streams, meta: { species, reaction } };
+}
+
+function sanitizeEnvelope(raw: unknown): {
+  message: string;
+  reasoning: string[];
+  topology: ReactorNetwork;
+} | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const topologyRaw = r.topology;
+  const topology = sanitizeTopology(topologyRaw);
+  if (!topology) return null;
+
   // message: synthesize a sane one if the model omitted it.
-  const reactorCount = nodes.filter(
+  const reactorCount = topology.nodes.filter(
     (n) => n.type === "cstr" || n.type === "pfr",
   ).length;
   const message =
     typeof r.message === "string" && r.message.trim().length > 0
       ? r.message.trim()
-      : `Generated a ${nodes.length}-node reactor network (${reactorCount} reactor(s), ${streams.length} stream(s)) for A -> B.`;
+      : `Generated a ${topology.nodes.length}-node reactor network (${reactorCount} reactor(s), ${topology.streams.length} stream(s)) for A -> B.`;
 
   // reasoning: coerce to 4-8 short, non-empty strings.
   let reasoning: string[] = [];
@@ -451,17 +542,74 @@ export async function POST(req: Request) {
       );
     }
 
-    // --- Mode detection: analyze vs generate ---
-    // If the request includes a context (topology + report) AND the prompt
-    // looks like a question (not a design request), use analyze mode.
+    // --- Mode detection: analyze vs generate vs generate-multi ---
     const ctx = body as { context?: { topology?: unknown; report?: unknown } };
     const hasContext = !!ctx.context?.topology;
-    const analyzeKeywords = /\b(why|explain|what if|how come|low|high|bottleneck|improve|increase|decrease|compare|analyze|analyse|should i|recommend)\b/i;
+    const analyzeKeywords = /\b(why|explain|what if|how come|low|high|bottleneck|improve|increase|decrease|analyze|analyse|should i|recommend)\b/i;
     const designKeywords = /\b(design|generate|build|create|add|make|synthesi[sz]e|construct)\b/i;
+    const multiKeywords = /\b(compare|alternatives|options|different ways|multiple ways|give me \d+|2 ways|3 ways|two ways|three ways|several ways|ways to)\b/i;
+    // Multi mode takes precedence: explicit request for alternatives.
+    const isMulti = multiKeywords.test(prompt);
     const isAnalyze =
-      hasContext && (analyzeKeywords.test(prompt) && !designKeywords.test(prompt));
+      hasContext && !isMulti && (analyzeKeywords.test(prompt) && !designKeywords.test(prompt));
 
     const zai = await ZAI.create();
+
+    if (isMulti) {
+      // --- MULTI-CANDIDATE MODE: 2-3 distinct topologies ---
+      // The LLM sometimes returns malformed JSON for large multi-candidate
+      // responses. Retry once if parsing fails (non-deterministic).
+      let parsed: unknown = null;
+      for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+        const completion = await zai.chat.completions.create({
+          messages: [
+            { role: "assistant", content: MULTI_SYSTEM_PROMPT },
+            { role: "user", content: attempt === 0 ? prompt : `${prompt}\n\nIMPORTANT: Your previous response was not valid JSON. Output ONLY a single valid JSON object with no extra text, no markdown, no trailing commas.` },
+          ],
+          thinking: { type: "disabled" },
+        });
+        const content = completion?.choices?.[0]?.message?.content ?? "";
+        parsed = extractJson(content);
+      }
+
+      if (parsed && typeof parsed === "object") {
+        const p = parsed as { message?: string; reasoning?: unknown; candidates?: unknown };
+        const rawCandidates = Array.isArray(p.candidates) ? p.candidates : [];
+        const sanitizedCandidates: { label: string; rationale: string; topology: ReactorNetwork }[] = [];
+
+        for (const c of rawCandidates) {
+          if (!c || typeof c !== "object") continue;
+          const cand = c as { label?: string; rationale?: string; topology?: unknown };
+          const topology = sanitizeTopology(cand.topology);
+          if (topology) {
+            sanitizedCandidates.push({
+              label: typeof cand.label === "string" && cand.label.trim() ? cand.label.trim() : `Candidate ${sanitizedCandidates.length + 1}`,
+              rationale: typeof cand.rationale === "string" && cand.rationale.trim() ? cand.rationale.trim() : "",
+              topology,
+            });
+          }
+        }
+
+        if (sanitizedCandidates.length > 0) {
+          return NextResponse.json(
+            {
+              mode: "multi",
+              message: typeof p.message === "string" && p.message.trim()
+                ? p.message.trim()
+                : `Generated ${sanitizedCandidates.length} candidate topologies.`,
+              reasoning: Array.isArray(p.reasoning)
+                ? p.reasoning.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 8)
+                : ["Parsed multi-candidate request", `Generated ${sanitizedCandidates.length} distinct topologies`],
+              candidates: sanitizedCandidates,
+            },
+            { status: 200 },
+          );
+        }
+      }
+      // Fallback: if multi parse failed, return a single generate fallback
+      const fallback = buildFallback("multi-candidate output unparseable");
+      return NextResponse.json(fallback, { status: 200 });
+    }
 
     if (isAnalyze) {
       // --- ANALYZE MODE: grounded Q&A about the current topology ---

@@ -93,16 +93,19 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 
 **Exit criteria (MET):** A user can ask a question about their current network and get an answer that references actual solver outputs, with no hallucinated numbers. Verified: "why is conversion low?" → grounded response citing CSTR-1 (17.7%, τ=1.00s, k=0.2155/s) and PFR-1 (47.4%, τ=1.50s, k=0.4284/s).
 
-### Phase 4 — Multi-Candidate Generation
-**Goal:** First taste of superstructure-style search. Instead of one topology, the synthesizer proposes 2–3 alternatives, each verified by the solver, with a comparison view.
+### Phase 4 — Multi-Candidate Generation (✅ COMPLETE)
+**Goal:** First taste of superstructure-style search. Instead of one topology, the synthesizer proposes 2 alternatives, each verified by the solver, with a comparison view.
 
 **Deliverables:**
-- Synthesizer returns multiple candidate topologies in one call
-- Each candidate is run through the solver independently
-- A comparison panel shows KPIs side-by-side (conversion, residence time, volume)
-- The Critic agent (early form) flags trade-offs between candidates
+- Added `generate-multi` mode to `/api/copilot`: the MULTI_SYSTEM_PROMPT instructs the LLM to produce 2 distinct candidate topologies (e.g. single CSTR vs single PFR) in one JSON response
+- `sanitizeTopology()` helper extracts and validates each candidate's topology independently (separate from the envelope-level `sanitizeEnvelope`)
+- Robust `extractJson()` with 3-tier repair: direct parse → slice between braces → fix trailing commas + auto-close truncated braces
+- 3-attempt retry loop: if JSON parsing fails, the LLM is re-prompted with a "your previous response was not valid JSON" nudge (handles non-deterministic malformed output)
+- Store: `candidates[]` state + `setCandidates()` runs the verified solver on each candidate so KPIs are real + `clearCandidates()`
+- `CandidateComparison` panel: slides in below the canvas with side-by-side KPI cards (conversion, total volume, unit count, status). Each card has a "Load to canvas" button that applies that candidate and dismisses the panel
+- CopilotSidecar: detects multi intent ("alternatives", "compare", "different ways"), routes to multi mode, shows reasoning, then surfaces the comparison panel
 
-**Exit criteria:** A user can request "give me 3 ways to achieve 90% conversion" and compare verified alternatives.
+**Exit criteria (MET):** A user can request "give me 2 alternatives to achieve 90% conversion" and compare verified alternatives side-by-side, then load either to the canvas. Verified: 2 candidates (Single CSTR Network, Single PFR) each with solver-verified KPIs; clicking "Load to canvas" applies the topology and clears the panel.
 
 ### Phase 5 — The Optimizer Agent
 **Goal:** The most differentiated capability — this is where we concretely beat ChatGPT/Gemini, which cannot do this at all.
@@ -114,6 +117,19 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 - Sensitivity analysis: which parameter most affects the objective?
 
 **Exit criteria:** A user can optimize a reactor and get a verified optimal operating point + a response surface plot.
+
+### Phase 5.5 — The Property Agent (literature + database lookup)
+**Goal:** The "fills in the gap" capability — when a user brings a question with minimal info, the agent retrieves real physical properties (ΔHr, Cp, Antoine coefficients, etc.) from external sources. This is the moat Aspen has; we approximate it with on-demand retrieval instead of a owned database.
+
+**Deliverables:**
+- A Property Agent that calls free/open APIs (NIST WebBook, PubChem) to fetch real thermochemical data by compound name or SMILES
+- When the LLM needs a property (e.g. heat of reaction for an energy balance), it emits a property-lookup task; the agent fetches the real value and injects it into the context
+- The solver layer is extended to use these real properties (Cp for energy balance, ΔHr for adiabatic temperature rise)
+- Users can specify a reaction ("methanol dehydration to DME") and the tool auto-populates kinetics + thermo
+
+**Exit criteria:** A user names a real reaction and the tool fetches and uses genuine physical properties — no manual data entry, no hallucinated constants.
+
+**Note:** We do not own a property database. We fetch on demand from authoritative free sources. This is the pragmatic path to matching Aspen's "it just knows the chemistry" experience without the data-acquisition burden.
 
 ### Phase 6 — True Multi-Agent Collaboration
 **Goal:** The "beats Gemini" moment. Separate agent personas surface in the chat and collaborate visibly.
@@ -139,3 +155,4 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 - **Phase 1 complete** — empty-state, undo/redo, stream table
 - **Phase 2 complete** — equipment glyph refinement
 - **Phase 3 complete** — context-aware copilot (analyze mode grounded in solver report)
+- **Phase 4 complete** — multi-candidate generation (superstructure-style search, comparison panel)

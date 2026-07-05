@@ -43,9 +43,11 @@ const EXAMPLE_PROMPTS = [
 ];
 
 interface CopilotResponse {
+  mode?: "multi" | "analyze" | "generate";
   message: string;
   reasoning: string[];
-  topology: ReactorNetwork;
+  topology: ReactorNetwork | null;
+  candidates?: { label: string; rationale: string; topology: ReactorNetwork }[];
 }
 
 function fmtTime(ts: number) {
@@ -275,6 +277,7 @@ export function CopilotSidecar() {
   const finalizeThinking = useTopology((s) => s.finalizeThinking);
   const setGenerating = useTopology((s) => s.setGenerating);
   const setNetwork = useTopology((s) => s.setNetwork);
+  const setCandidates = useTopology((s) => s.setCandidates);
   const network = useTopology((s) => s.network);
   const report = useTopology((s) => s.report);
 
@@ -383,7 +386,10 @@ export function CopilotSidecar() {
           return;
         }
 
-        if (data.topology?.nodes?.length) {
+        if (data.mode === "multi" && data.candidates?.length) {
+          setCandidates(data.candidates);
+          pushReasoning(`Generated ${data.candidates.length} candidates · running verified solvers on each`, "verify");
+        } else if (data.topology?.nodes?.length) {
           setNetwork(data.topology);
           pushReasoning("Topology committed · dispatching verified solvers", "info");
         } else if (!data.topology) {
@@ -418,7 +424,7 @@ export function CopilotSidecar() {
         abortRef.current = null;
       }
     },
-    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, network, report, streamText],
+    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, network, report, streamText],
   );
 
   const stop = useCallback(() => {

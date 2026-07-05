@@ -95,6 +95,11 @@ interface TopologyState {
   loadTopology: (name: string) => boolean;
   deleteSavedTopology: (name: string) => void;
   savedTopologies: { name: string; ts: number; nodes: number }[];
+
+  // --- multi-candidate comparison (Phase 4) ---
+  candidates: { label: string; rationale: string; topology: ReactorNetwork; report: SolverReport | null }[];
+  setCandidates: (cands: { label: string; rationale: string; topology: ReactorNetwork }[]) => void;
+  clearCandidates: () => void;
 }
 
 const seedNetwork = (): ReactorNetwork => {
@@ -191,6 +196,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   savedTopologies: loadSavedList(),
   canUndo: false,
   canRedo: false,
+  candidates: [],
 
   setNetwork: (n) => {
     pushHistory(get().network);
@@ -465,6 +471,18 @@ export const useTopology = create<TopologyState>((set, get) => ({
     writeStorage(all.filter((e) => e.name !== name.trim()));
     set({ savedTopologies: loadSavedList() });
   },
+
+  // --- multi-candidate comparison (Phase 4) ---
+  setCandidates: (cands) => {
+    // Run the verified solver on each candidate so KPIs are real.
+    const enriched = cands.map((c) => ({
+      ...c,
+      report: solveNetwork(c.topology),
+    }));
+    set({ candidates: enriched });
+  },
+
+  clearCandidates: () => set({ candidates: [] }),
 }));
 
 // --- localStorage helpers for the topology library ---
