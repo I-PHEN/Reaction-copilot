@@ -92,6 +92,7 @@ function CanvasInner() {
   const inspectedNodeId = useTopology((s) => s.inspectedNodeId);
   const selectNode = useTopology((s) => s.selectNode);
   const updateNodePosition = useTopology((s) => s.updateNodePosition);
+  const addNode = useTopology((s) => s.addNode);
   const removeNode = useTopology((s) => s.removeNode);
   const duplicateNode = useTopology((s) => s.duplicateNode);
   const connectNodes = useTopology((s) => s.connectNodes);
