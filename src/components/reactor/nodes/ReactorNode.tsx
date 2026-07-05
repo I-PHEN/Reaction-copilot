@@ -27,12 +27,12 @@ const STATUS_DOT: Record<SolverResult["status"], string> = {
  * positioned below so it doesn't shift handle positions.
  */
 const NODE_SIZE: Record<NodeType, { w: number; glyphH: number }> = {
-  feed: { w: 146, glyphH: 90 },
-  cstr: { w: 144, glyphH: 166 },
-  pfr: { w: 173, glyphH: 106 },
+  feed: { w: 146, glyphH: 95 },
+  cstr: { w: 144, glyphH: 183 },
+  pfr: { w: 173, glyphH: 117 },
   mixer: { w: 122, glyphH: 122 },
-  separator: { w: 108, glyphH: 205 },
-  product: { w: 146, glyphH: 90 },
+  separator: { w: 108, glyphH: 210 },
+  product: { w: 146, glyphH: 95 },
 };
 
 function ReactorNodeImpl({ id, data, selected }: NodeProps) {

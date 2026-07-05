@@ -568,3 +568,42 @@ Stage Summary:
   + buttons) on all topology/parameter mutations, and a collapsible stream table that makes
   the network read like a real process flowsheet. Foundation is solid for Phase 2 (equipment
   glyph polish) and Phase 3 (copilot intelligence).
+
+---
+Task ID: Phase-2
+Agent: Orchestrator (main)
+Task: Phase 2 — equipment glyph refinement (visual fidelity, zero perf cost).
+
+Work Log:
+- CSTR: added a cooling jacket (outer shell with its own gradient, rust-toned utility nozzles
+  top-in/bottom-out), motor cooling fins (4 vertical lines on the motor housing), shaft coupling,
+  curved-blade Rushton impeller (curved blade paths + disc ellipse), and a sampling port on the
+  right side. viewBox 104×120 → 104×132 to fit the jacket + taller motor.
+- PFR: upgraded from 4 to 6 tubes, thicker tube sheets (rects instead of lines), tube-pass
+  partition baffles (alternating up/down), and shell-side utility nozzles (top + bottom, rust-
+  toned). viewBox 124×76 → 124×84.
+- Separator: split trays into upper (rectifying) + lower (stripping) sections with a distinct
+  thicker feed tray in the middle. Downcomers now have weir tabs. Added a condenser hint (small
+  coil at top, silver) and a reboiler hint (small coil at bottom, rust-toned). viewBox 76×144 →
+  76×148.
+- Feed/Product: added level gauges (vertical glass tube with 4 tick marks + liquid fill), "F"/"P"
+  labels, and more realistic drum proportions. viewBox 104×64 → 104×68.
+- Mixer: added diagonal static-mixer element lines (X pattern) for more internal detail.
+- Updated NODE_SIZE aspect ratios to match the new viewBoxes (CSTR 183h, PFR 117h, separator
+  210h, feed/product 95h). All SVGs verified to fill wrappers at 1.000 ratio (zero letterboxing,
+  handles align with nozzle tips).
+- All refinements are static SVG paths/lines/gradients — zero runtime cost, no animations, no
+  re-renders. App performance unchanged.
+
+Verification (Agent Browser):
+- All 5 unit types render (feed/cstr/pfr/separator/product) with no console errors ✓.
+- SVG fill ratio = 1.000 for all nodes (no letterboxing) ✓.
+- CSTR has 31 SVG elements + 2 gradients (jacket + vessel) ✓.
+- Layout integrity maintained (rootScrollH=900=viewportH) ✓.
+- Lint clean ✓.
+
+Stage Summary:
+- Equipment illustrations are now significantly more detailed and realistic: CSTR has a cooling
+  jacket + curved impeller + sampling port, PFR has 6 tubes + utility nozzles, separator has a
+  distinct feed tray + reboiler/condenser hints, feed/product have level gauges. The canvas now
+  reads like a genuine process flowsheet. Zero performance impact.
