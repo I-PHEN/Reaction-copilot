@@ -111,6 +111,11 @@ interface TopologyState {
   optimization: OptimizationResult | null;
   setOptimization: (result: OptimizationResult) => void;
   clearOptimization: () => void;
+
+  // --- chemistry context (Phase 5.5 — Property Agent) ---
+  chemistry: { name: string; formula: string; molecularWeight: number; deltaHf?: number; cp?: number; boilingPoint?: number; source: string }[];
+  addCompound: (c: { name: string; formula: string; molecularWeight: number; deltaHf?: number; cp?: number; boilingPoint?: number; source: string }) => void;
+  clearChemistry: () => void;
 }
 
 const seedNetwork = (): ReactorNetwork => {
@@ -210,6 +215,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   candidates: [],
   pendingConfigNodeId: null,
   optimization: null,
+  chemistry: [],
 
   setNetwork: (n) => {
     pushHistory(get().network);
@@ -508,6 +514,15 @@ export const useTopology = create<TopologyState>((set, get) => ({
   // --- optimization (Phase 5) ---
   setOptimization: (result) => set({ optimization: result }),
   clearOptimization: () => set({ optimization: null }),
+
+  // --- chemistry context (Phase 5.5) ---
+  addCompound: (c) =>
+    set((s) => ({
+      chemistry: s.chemistry.find((x) => x.name === c.name)
+        ? s.chemistry // dedupe
+        : [...s.chemistry, c],
+    })),
+  clearChemistry: () => set({ chemistry: [] }),
 }));
 
 // --- localStorage helpers for the topology library ---

@@ -557,6 +557,24 @@ function buildContextBlock(
   return block;
 }
 
+/**
+ * Build a chemistry context block from fetched compound properties.
+ * This is the "fills in the gap" data the Property Agent provides.
+ */
+function buildChemistryBlock(chemistry: unknown): string {
+  if (!Array.isArray(chemistry) || chemistry.length === 0) return "";
+  let block = `\n### Chemistry Context (real physical properties)\n`;
+  for (const c of chemistry) {
+    const cp = c as { name: string; formula: string; molecularWeight: number; deltaHf?: number; cp?: number; boilingPoint?: number; source: string };
+    block += `- ${cp.name} (${cp.formula}): MW=${cp.molecularWeight} g/mol`;
+    if (cp.deltaHf != null) block += `, ΔHf=${cp.deltaHf} kJ/mol`;
+    if (cp.cp != null && cp.cp > 0) block += `, Cp=${cp.cp} J/(mol·K)`;
+    if (cp.boilingPoint != null) block += `, BP=${cp.boilingPoint} K`;
+    block += ` [${cp.source}]\n`;
+  }
+  return block;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
@@ -646,7 +664,7 @@ export async function POST(req: Request) {
 
     if (isOptimize) {
       // --- OPTIMIZE MODE: LLM proposes ranges, solver runs the grid ---
-      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report);
+      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report) + buildChemistryBlock((ctx.context as { chemistry?: unknown })?.chemistry);
       const userMessage = `${contextBlock}\n---\n\nUser request: ${prompt}`;
 
       const completion = await zai.chat.completions.create({
@@ -736,7 +754,7 @@ export async function POST(req: Request) {
 
     if (isAnalyze) {
       // --- ANALYZE MODE: grounded Q&A about the current topology ---
-      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report);
+      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report) + buildChemistryBlock((ctx.context as { chemistry?: unknown })?.chemistry);
       const userMessage = `${contextBlock}\n---\n\nUser question: ${prompt}`;
 
       const completion = await zai.chat.completions.create({

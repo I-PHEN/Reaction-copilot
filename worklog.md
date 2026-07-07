@@ -774,3 +774,46 @@ Stage Summary:
   reports sensitivity — all grounded in solver data. This is what ChatGPT/Gemini cannot do.
   Combined with Phase 4.5's n-th order solver, the tool now handles arbitrary reaction orders
   AND optimizes them. Phase 5.5 (Property Agent) is next on the roadmap.
+
+---
+Task ID: Phase-5.5
+Agent: Orchestrator (main)
+Task: Phase 5.5 — the Property Agent (real physical properties from curated NIST database + PubChem fallback).
+
+Work Log:
+- Built curated local property database (src/lib/solvers/properties.ts) with 20 common compounds:
+  methanol, ethanol, water, DME, ethylene, ethylene oxide, benzene, toluene, hydrogen, oxygen,
+  CO2, CO, ammonia, NO, SO2, propylene, acetone, acetic acid, formaldehyde, + methanol→DME reaction.
+  All with REAL NIST-sourced thermochemical data: ΔHf (heat of formation), Cp (heat capacity),
+  MW, BP, density. Alias system for flexible lookup (meoh→methanol, h2o→water, etc.).
+- Built /api/properties route: queries local DB first (full thermo), falls back to PubChem REST
+  API for identification (MW, formula, SMILES) on compounds not in local DB. 5-second timeout
+  on PubChem fetch. Returns 404 with helpful message if not found anywhere.
+- Store: added chemistry[] state + addCompound (dedupes by name) / clearChemistry actions.
+- ChemistryPanel component: search bar with Enter-to-search, scrollable compound cards showing
+  real properties (name, formula, MW, ΔHf with green/amber color-coding for exothermic/
+  endothermic, Cp, BP, source attribution). Empty state shows a hint.
+- Copilot integration: chemistry data is included in the context payload sent to /api/copilot.
+  buildChemistryBlock() serializes it into the LLM's context block. Analyze and optimize modes
+  now receive real physical properties alongside topology + solver report.
+
+Verification (Agent Browser):
+- /api/properties?name=methanol → source: NIST WebBook, ΔHf=-201, Cp=43.9, BP=337.6 ✓
+- /api/properties?name=ethanol → ΔHf=-234.8, Cp=65.6 ✓
+- /api/properties?name=ammonia → ΔHf=-45.9 ✓
+- /api/properties?name=meoh → alias resolves to Methanol ✓
+- /api/properties?name=xyz123 → 404 with helpful message ✓
+- UI: searched "methanol" → compound card appears with CH₃OH, MW=32.04, ΔHf=-201.0, Cp=43.9 ✓
+- UI: searched "water" → second card with H₂O, ΔHf=-241.8, Cp=33.6 ✓
+- Copilot: "explain the properties of methanol and water" → grounded response citing exact
+  values from the database (32.04 g/mol, -201 kJ/mol, 43.9 J/mol·K, 18.015 g/mol, -241.8 kJ/mol,
+  33.6 J/mol·K) — zero hallucination ✓.
+- No console errors; lint clean ✓.
+
+Stage Summary:
+- The Property Agent is live: users search for compounds, see real NIST-sourced physical
+  properties, and the copilot uses those properties in its answers. This is the "fills in the
+  gap" capability — the tool now knows real chemistry, not just generic A→B. The local database
+  covers the 20 most common reaction-engineering compounds; PubChem adds breadth for identification.
+  Combined with Phase 5's optimizer and Phase 4.5's n-th order solver, the tool is now a serious
+  reaction-engineering workspace.

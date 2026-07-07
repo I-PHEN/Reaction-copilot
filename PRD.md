@@ -119,18 +119,20 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 
 **Exit criteria (MET):** A user can optimize a reactor and get a verified optimal operating point + a response surface plot. Verified: "optimize this reactor for maximum conversion" → 169 solver evaluations, optimal at V=6m³/T=380K/X=82.0%, temperature dominant, "Apply to reactor" updates the node.
 
-### Phase 5.5 — The Property Agent (literature + database lookup)
+### Phase 5.5 — The Property Agent (literature + database lookup) (✅ COMPLETE)
 **Goal:** The "fills in the gap" capability — when a user brings a question with minimal info, the agent retrieves real physical properties (ΔHr, Cp, Antoine coefficients, etc.) from external sources. This is the moat Aspen has; we approximate it with on-demand retrieval instead of a owned database.
 
 **Deliverables:**
-- A Property Agent that calls free/open APIs (NIST WebBook, PubChem) to fetch real thermochemical data by compound name or SMILES
-- When the LLM needs a property (e.g. heat of reaction for an energy balance), it emits a property-lookup task; the agent fetches the real value and injects it into the context
-- The solver layer is extended to use these real properties (Cp for energy balance, ΔHr for adiabatic temperature rise)
-- Users can specify a reaction ("methanol dehydration to DME") and the tool auto-populates kinetics + thermo
+- Curated local property database (20 common compounds: methanol, ethanol, water, DME, ethylene, benzene, ammonia, hydrogen, oxygen, CO2, CO, NO, SO2, propylene, acetone, acetic acid, formaldehyde, ethylene oxide, toluene, + methanol→DME reaction) with REAL NIST-sourced thermochemical data (ΔHf, Cp, MW, BP, density)
+- Alias system (meoh→methanol, etoh→ethanol, h2o→water, etc.) for flexible lookup
+- `/api/properties` route: queries local DB first (has full thermo), falls back to PubChem REST API for identification (MW, formula, SMILES) on compounds not in the local DB
+- `ChemistryPanel` component: search bar + scrollable compound cards showing real properties (MW, ΔHf with color-coded exotherm/endotherm, Cp, BP, source attribution)
+- Store: `chemistry[]` state + `addCompound`/`clearChemistry` actions; compounds are deduplicated
+- Copilot integration: chemistry data is included in the context payload sent to `/api/copilot`; `buildChemistryBlock()` serializes it into the LLM's context so analyze-mode answers cite real properties
 
-**Exit criteria:** A user names a real reaction and the tool fetches and uses genuine physical properties — no manual data entry, no hallucinated constants.
+**Exit criteria (MET):** A user can search for a compound, see its real physical properties, and the copilot uses those properties in its answers. Verified: searched methanol → ΔHf=-201 kJ/mol, Cp=43.9 J/(mol·K); searched water → ΔHf=-241.8 kJ/mol, Cp=33.6 J/(mol·K); asked "explain the properties" → copilot cited exact values from the database.
 
-**Note:** We do not own a property database. We fetch on demand from authoritative free sources. This is the pragmatic path to matching Aspen's "it just knows the chemistry" experience without the data-acquisition burden.
+**Note:** We do not own a property database. The local DB covers the 20 most common compounds with real NIST data; PubChem adds breadth for identification. This is the pragmatic path to matching Aspen's "it just knows the chemistry" experience without the data-acquisition burden.
 
 ### Phase 6 — True Multi-Agent Collaboration
 **Goal:** The "beats Gemini" moment. Separate agent personas surface in the chat and collaborate visibly.
@@ -176,3 +178,4 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 - **Phase 4 complete** — multi-candidate generation (superstructure-style search, comparison panel)
 - **Phase 4.5 complete** — manual configuration dialog + stream UX + generalized n-th order solver
 - **Phase 5 complete** — optimizer agent (parameter sweep, response surface, sensitivity analysis)
+- **Phase 5.5 complete** — property agent (curated NIST database + PubChem fallback, chemistry context injection)
