@@ -8,7 +8,6 @@ import { StreamTable } from "@/components/reactor/StreamTable";
 import { CandidateComparison } from "@/components/reactor/CandidateComparison";
 import { ConfigurationDialog } from "@/components/reactor/ConfigurationDialog";
 import { ResponseSurface } from "@/components/reactor/ResponseSurface";
-import { ChemistryPanel } from "@/components/reactor/ChemistryPanel";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   DropdownMenu,
@@ -326,7 +325,6 @@ export default function Page() {
       </main>
       <CandidateComparison />
       <ResponseSurface />
-      <ChemistryPanel />
       <StreamTable />
       <ReconcilerBar />
       <ConfigurationDialog />
