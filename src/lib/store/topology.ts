@@ -20,6 +20,7 @@ import {
   solveNetwork,
   type NetworkNode,
   type NodeType,
+  type OptimizationResult,
   type ReactorNetwork,
   type SolverReport,
   type Stream,
@@ -105,6 +106,11 @@ interface TopologyState {
   pendingConfigNodeId: string | null;
   requestConfig: (id: string) => void;
   dismissConfig: () => void;
+
+  // --- optimization (Phase 5) ---
+  optimization: OptimizationResult | null;
+  setOptimization: (result: OptimizationResult) => void;
+  clearOptimization: () => void;
 }
 
 const seedNetwork = (): ReactorNetwork => {
@@ -203,6 +209,7 @@ export const useTopology = create<TopologyState>((set, get) => ({
   canRedo: false,
   candidates: [],
   pendingConfigNodeId: null,
+  optimization: null,
 
   setNetwork: (n) => {
     pushHistory(get().network);
@@ -497,6 +504,10 @@ export const useTopology = create<TopologyState>((set, get) => ({
   // --- manual configuration dialog (Phase 4.5) ---
   requestConfig: (id) => set({ pendingConfigNodeId: id }),
   dismissConfig: () => set({ pendingConfigNodeId: null }),
+
+  // --- optimization (Phase 5) ---
+  setOptimization: (result) => set({ optimization: result }),
+  clearOptimization: () => set({ optimization: null }),
 }));
 
 // --- localStorage helpers for the topology library ---

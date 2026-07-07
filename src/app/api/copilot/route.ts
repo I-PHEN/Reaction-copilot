@@ -179,6 +179,35 @@ Generate 2 genuinely different candidates (e.g. single CSTR, single PFR).
 
 OUTPUT: a single JSON object, nothing else.`;
 
+/**
+ * Optimize-mode system prompt. The LLM receives the current topology +
+ * a reactor to optimize, and proposes sweep ranges for volume × temperature.
+ * The actual grid search runs in the verified solver — the LLM never
+ * computes results, only proposes the search space.
+ */
+const OPTIMIZE_SYSTEM_PROMPT = `You are REACTOR-COPILOT in OPTIMIZE mode. The user wants to optimize a reactor. You are given the current topology + solver report. Your job is to propose the parameter sweep ranges for the optimization.
+
+Rules:
+- Identify which reactor to optimize (the first cstr or pfr in the network).
+- Propose a volume range [min, max] in m³ (typically 0.5× to 3× the current volume).
+- Propose a temperature range [min, max] in K (typically ±30K from the current temperature, within 290-450K).
+- State the objective (e.g. "maximize conversion").
+- Do NOT compute conversion values — the solver does that.
+
+Respond with a single JSON object, NOTHING else:
+{
+  "message": string,        // 1-2 sentences: what you'll optimize and why these ranges
+  "reasoning": string[],    // 3-5 thought steps
+  "optimize": {
+    "nodeId": string,       // the reactor node id to optimize
+    "objective": string,    // e.g. "maximize conversion"
+    "volumeRange": [number, number],    // [min, max] m³
+    "temperatureRange": [number, number] // [min, max] K
+  }
+}
+
+No extra text, no markdown, no code fences.`;
+
 const NODE_TYPES: ReadonlySet<string> = new Set<NodeType>([
   "feed",
   "cstr",
@@ -542,16 +571,20 @@ export async function POST(req: Request) {
       );
     }
 
-    // --- Mode detection: analyze vs generate vs generate-multi ---
+    // --- Mode detection: analyze vs generate vs generate-multi vs optimize ---
     const ctx = body as { context?: { topology?: unknown; report?: unknown } };
     const hasContext = !!ctx.context?.topology;
     const analyzeKeywords = /\b(why|explain|what if|how come|low|high|bottleneck|improve|increase|decrease|analyze|analyse|should i|recommend)\b/i;
     const designKeywords = /\b(design|generate|build|create|add|make|synthesi[sz]e|construct)\b/i;
     const multiKeywords = /\b(compare|alternatives|options|different ways|multiple ways|give me \d+|2 ways|3 ways|two ways|three ways|several ways|ways to)\b/i;
-    // Multi mode takes precedence: explicit request for alternatives.
+    const optimizeKeywords = /\b(optimize|optimise|maximize|maximise|minimize|minimise|best|sweep|response surface|optimal)\b/i;
+    // Multi mode: explicit request for alternatives.
     const isMulti = multiKeywords.test(prompt);
+    // Optimize mode: requires context + explicit optimize intent (not multi).
+    const isOptimize = hasContext && !isMulti && optimizeKeywords.test(prompt);
+    // Analyze mode: requires context, question keywords, not design/multi/optimize.
     const isAnalyze =
-      hasContext && !isMulti && (analyzeKeywords.test(prompt) && !designKeywords.test(prompt));
+      hasContext && !isMulti && !isOptimize && (analyzeKeywords.test(prompt) && !designKeywords.test(prompt));
 
     const zai = await ZAI.create();
 
@@ -609,6 +642,96 @@ export async function POST(req: Request) {
       // Fallback: if multi parse failed, return a single generate fallback
       const fallback = buildFallback("multi-candidate output unparseable");
       return NextResponse.json(fallback, { status: 200 });
+    }
+
+    if (isOptimize) {
+      // --- OPTIMIZE MODE: LLM proposes ranges, solver runs the grid ---
+      const contextBlock = buildContextBlock(ctx.context!.topology, ctx.context!.report);
+      const userMessage = `${contextBlock}\n---\n\nUser request: ${prompt}`;
+
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: "assistant", content: OPTIMIZE_SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
+        thinking: { type: "disabled" },
+      });
+
+      const content = completion?.choices?.[0]?.message?.content ?? "";
+      const parsed = extractJson(content);
+
+      if (parsed && typeof parsed === "object") {
+        const p = parsed as {
+          message?: string;
+          reasoning?: unknown;
+          optimize?: {
+            nodeId?: string;
+            objective?: string;
+            volumeRange?: [number, number];
+            temperatureRange?: [number, number];
+          };
+        };
+
+        const opt = p.optimize;
+        const topology = ctx.context!.topology as { nodes?: Array<{ id: string; type: string; params: Record<string, number> }> };
+        const nodes = Array.isArray(topology?.nodes) ? topology!.nodes : [];
+
+        // Find the target reactor: use the LLM's nodeId if valid, else the
+        // first cstr/pfr in the network.
+        let targetNode = opt?.nodeId ? nodes.find((n) => n.id === opt.nodeId) : null;
+        if (!targetNode) {
+          targetNode = nodes.find((n) => n.type === "cstr" || n.type === "pfr") ?? null;
+        }
+
+        if (targetNode && opt?.volumeRange && opt?.temperatureRange) {
+          // Clamp ranges to safe bounds.
+          const vRange: [number, number] = [
+            Math.max(0.1, Math.min(50, Number(opt.volumeRange[0]) || 0.5)),
+            Math.max(0.2, Math.min(100, Number(opt.volumeRange[1]) || 10)),
+          ];
+          const tRange: [number, number] = [
+            Math.max(290, Math.min(500, Number(opt.temperatureRange[0]) || 300)),
+            Math.max(291, Math.min(600, Number(opt.temperatureRange[1]) || 400)),
+          ];
+          // Ensure min < max.
+          if (vRange[0] >= vRange[1]) vRange[1] = vRange[0] + 1;
+          if (tRange[0] >= tRange[1]) tRange[1] = tRange[0] + 10;
+
+          const objective = typeof opt.objective === "string" && opt.objective.trim()
+            ? opt.objective.trim()
+            : "maximize conversion";
+
+          return NextResponse.json(
+            {
+              mode: "optimize",
+              message: typeof p.message === "string" && p.message.trim()
+                ? p.message.trim()
+                : `Optimizing ${targetNode.type.toUpperCase()} over V∈[${vRange[0].toFixed(1)}, ${vRange[1].toFixed(1)}] m³, T∈[${tRange[0].toFixed(0)}, ${tRange[1].toFixed(0)}] K.`,
+              reasoning: Array.isArray(p.reasoning)
+                ? p.reasoning.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, 8)
+                : ["Identified reactor to optimize", "Proposed sweep ranges", "Solver will run the grid"],
+              optimize: {
+                nodeId: targetNode.id,
+                objective,
+                volumeRange: vRange,
+                temperatureRange: tRange,
+              },
+              topology: null,
+            },
+            { status: 200 },
+          );
+        }
+      }
+      // Fallback: return a message explaining optimization couldn't be set up.
+      return NextResponse.json(
+        {
+          mode: "optimize",
+          message: "I couldn't set up the optimization. Make sure your network has at least one reactor (CSTR or PFR), then try again.",
+          reasoning: ["Could not identify a reactor to optimize"],
+          topology: null,
+        },
+        { status: 200 },
+      );
     }
 
     if (isAnalyze) {

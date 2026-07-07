@@ -733,3 +733,44 @@ Stage Summary:
   conditions. The solver handles arbitrary reaction orders (0th, 1st, 2nd, 3rd, fractional)
   via Newton-Raphson for CSTR and generalized RK4 for PFR. Stream creation works via drag
   OR the "Connect to…" context-menu mode. The tool is no longer limited to first-order A→B.
+
+---
+Task ID: Phase-5
+Agent: Orchestrator (main)
+Task: Phase 5 — the Optimizer Agent (parameter sweep + response surface + sensitivity analysis).
+
+Work Log:
+- Built optimizeReactor() in src/lib/solvers/optimizer.ts: runs a grid search over volume ×
+  temperature (13×13 = 169 points by default), calling the verified CSTR or PFR solver at each
+  point. Returns: full response surface (OptimizationPoint[][]), optimal point (max conversion),
+  sensitivity analysis (range of conversion across each axis at the other's midpoint, reports
+  dominant parameter), total solver evaluations. All math is in the verified solver — no LLM
+  computes results.
+- Store: added optimization state + setOptimization/clearOptimization actions.
+- /api/copilot optimize mode: OPTIMIZE_SYSTEM_PROMPT instructs the LLM to propose sweep ranges
+  (volume 0.5×-3× current, temperature ±30K) based on the current topology + report. The API
+  clamps ranges to safe bounds (V 0.1-100, T 290-600), ensures min<max, identifies the target
+  reactor (first cstr/pfr), and returns the ranges. The actual grid search runs client-side.
+- ResponseSurface panel: heatmap visualization (13×13 grid, conversion colored zinc→cyan→emerald),
+  optimal-point card with KPIs (conversion, volume, temperature, τ, k) + "Apply to reactor" button,
+  sensitivity bars (volume vs temperature dominance), color legend. Slides in below the canvas.
+- CopilotSidecar: detects optimize intent ("optimize", "maximize", "best", "sweep", "optimal"),
+  routes to optimize mode, runs optimizeReactor() locally, streams reasoning ("Running parameter
+  sweep...", "Sweep complete · 169 evaluations · optimal X=82.0%").
+- Mode detection order fixed: isMulti declared before isOptimize (was a TDZ error).
+
+Verification (Agent Browser):
+- Built feed→CSTR→product network, asked "optimize this reactor for maximum conversion":
+  - 169 solver evaluations across V∈[1,6]m³ × T∈[320,380]K
+  - Optimal: X=82.0% at V=6.00m³, T=380K, τ=3.00s, k=1.5196
+  - Sensitivity: temperature dominant (correct — Arrhenius k grows exponentially with T)
+  - "Apply to reactor" updated CSTR params to V=6, T=380 ✓
+- Response surface panel visible with heatmap + optimal card + sensitivity bars ✓.
+- No console errors; lint clean; POST /api/copilot returns 200 ✓.
+
+Stage Summary:
+- The optimizer agent is the most differentiated capability: it runs a real parameter sweep
+  with the verified solver, plots a response surface, finds the optimal operating point, and
+  reports sensitivity — all grounded in solver data. This is what ChatGPT/Gemini cannot do.
+  Combined with Phase 4.5's n-th order solver, the tool now handles arbitrary reaction orders
+  AND optimizes them. Phase 5.5 (Property Agent) is next on the roadmap.

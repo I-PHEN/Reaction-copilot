@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
-import type { ReactorNetwork } from "@/lib/solvers";
+import { optimizeReactor, type ReactorNetwork } from "@/lib/solvers";
 
 const QUICK_ACTIONS = [
   { id: "optimize-yield", label: "Optimize yield", icon: Zap, prompt: "Optimize this network for maximum yield of B. Increase reactor volumes and temperature within safe limits to push conversion above 90%, and verify the kinetic model still converges." },
@@ -43,11 +43,17 @@ const EXAMPLE_PROMPTS = [
 ];
 
 interface CopilotResponse {
-  mode?: "multi" | "analyze" | "generate";
+  mode?: "multi" | "analyze" | "generate" | "optimize";
   message: string;
   reasoning: string[];
   topology: ReactorNetwork | null;
   candidates?: { label: string; rationale: string; topology: ReactorNetwork }[];
+  optimize?: {
+    nodeId: string;
+    objective: string;
+    volumeRange: [number, number];
+    temperatureRange: [number, number];
+  };
 }
 
 function fmtTime(ts: number) {
@@ -278,6 +284,7 @@ export function CopilotSidecar() {
   const setGenerating = useTopology((s) => s.setGenerating);
   const setNetwork = useTopology((s) => s.setNetwork);
   const setCandidates = useTopology((s) => s.setCandidates);
+  const setOptimization = useTopology((s) => s.setOptimization);
   const network = useTopology((s) => s.network);
   const report = useTopology((s) => s.report);
 
@@ -389,6 +396,21 @@ export function CopilotSidecar() {
         if (data.mode === "multi" && data.candidates?.length) {
           setCandidates(data.candidates);
           pushReasoning(`Generated ${data.candidates.length} candidates · running verified solvers on each`, "verify");
+        } else if (data.mode === "optimize" && data.optimize) {
+          // Run the optimizer locally using the verified solver.
+          const targetNode = network.nodes.find((n) => n.id === data.optimize!.nodeId);
+          if (targetNode) {
+            pushReasoning(`Running parameter sweep: V∈[${data.optimize.volumeRange[0]}, ${data.optimize.volumeRange[1]}] m³, T∈[${data.optimize.temperatureRange[0]}, ${data.optimize.temperatureRange[1]}] K`, "verify");
+            const result = optimizeReactor(
+              targetNode,
+              data.optimize.volumeRange,
+              data.optimize.temperatureRange,
+              12,
+              data.optimize.objective,
+            );
+            setOptimization(result);
+            pushReasoning(`Sweep complete · ${result.evaluations} solver evaluations · optimal X=${(result.optimal.conversion * 100).toFixed(1)}% at V=${result.optimal.volume.toFixed(2)}m³, T=${result.optimal.temperature.toFixed(0)}K`, "verify");
+          }
         } else if (data.topology?.nodes?.length) {
           setNetwork(data.topology);
           pushReasoning("Topology committed · dispatching verified solvers", "info");
@@ -424,7 +446,7 @@ export function CopilotSidecar() {
         abortRef.current = null;
       }
     },
-    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, network, report, streamText],
+    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, setOptimization, network, report, streamText],
   );
 
   const stop = useCallback(() => {

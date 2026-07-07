@@ -7,6 +7,7 @@ import { DeepDiveOverlay } from "@/components/reactor/DeepDiveOverlay";
 import { StreamTable } from "@/components/reactor/StreamTable";
 import { CandidateComparison } from "@/components/reactor/CandidateComparison";
 import { ConfigurationDialog } from "@/components/reactor/ConfigurationDialog";
+import { ResponseSurface } from "@/components/reactor/ResponseSurface";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   DropdownMenu,
@@ -323,6 +324,7 @@ export default function Page() {
         </ResizablePanelGroup>
       </main>
       <CandidateComparison />
+      <ResponseSurface />
       <StreamTable />
       <ReconcilerBar />
       <ConfigurationDialog />

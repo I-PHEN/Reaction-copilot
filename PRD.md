@@ -107,16 +107,17 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 
 **Exit criteria (MET):** A user can request "give me 2 alternatives to achieve 90% conversion" and compare verified alternatives side-by-side, then load either to the canvas. Verified: 2 candidates (Single CSTR Network, Single PFR) each with solver-verified KPIs; clicking "Load to canvas" applies the topology and clears the panel.
 
-### Phase 5 — The Optimizer Agent
+### Phase 5 — The Optimizer Agent (✅ COMPLETE)
 **Goal:** The most differentiated capability — this is where we concretely beat ChatGPT/Gemini, which cannot do this at all.
 
 **Deliverables:**
-- "Optimize for yield/selectivity/volume" runs a real parameter sweep (grid search over volume × temperature)
-- The solver runs across the grid; results plot as a response surface
-- The optimizer returns the best operating point, grounded in solver data
-- Sensitivity analysis: which parameter most affects the objective?
+- `optimizeReactor()` solver module: runs a grid search over volume × temperature (13×13 = 169 points by default), calling the verified CSTR/PFR solver at each point
+- Returns: full response surface, optimal operating point (max conversion), sensitivity analysis (which parameter dominates), total solver evaluations
+- `/api/copilot` optimize mode: the LLM receives the current topology + report, proposes sweep ranges (volume ±, temperature ±), the solver runs the grid locally — the LLM never computes results
+- `ResponseSurface` panel: heatmap visualization (conversion colored zinc→cyan→emerald), optimal-point card with KPIs + "Apply to reactor" button, sensitivity bars showing volume vs temperature dominance
+- CopilotSidecar: detects optimize intent ("optimize", "maximize", "best", "sweep"), routes to optimize mode, runs the optimizer, streams reasoning ("Running parameter sweep…", "Sweep complete · 169 evaluations · optimal X=82.0%")
 
-**Exit criteria:** A user can optimize a reactor and get a verified optimal operating point + a response surface plot.
+**Exit criteria (MET):** A user can optimize a reactor and get a verified optimal operating point + a response surface plot. Verified: "optimize this reactor for maximum conversion" → 169 solver evaluations, optimal at V=6m³/T=380K/X=82.0%, temperature dominant, "Apply to reactor" updates the node.
 
 ### Phase 5.5 — The Property Agent (literature + database lookup)
 **Goal:** The "fills in the gap" capability — when a user brings a question with minimal info, the agent retrieves real physical properties (ΔHr, Cp, Antoine coefficients, etc.) from external sources. This is the moat Aspen has; we approximate it with on-demand retrieval instead of a owned database.
@@ -174,3 +175,4 @@ Each phase is additive — no rewrites. Each validates the architecture can supp
 - **Phase 3 complete** — context-aware copilot (analyze mode grounded in solver report)
 - **Phase 4 complete** — multi-candidate generation (superstructure-style search, comparison panel)
 - **Phase 4.5 complete** — manual configuration dialog + stream UX + generalized n-th order solver
+- **Phase 5 complete** — optimizer agent (parameter sweep, response surface, sensitivity analysis)
