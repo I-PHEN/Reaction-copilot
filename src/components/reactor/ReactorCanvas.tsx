@@ -319,9 +319,10 @@ function CanvasInner() {
         </ReactFlow>
 
         {/* Empty-state prompt — OUTSIDE ReactFlow so clicks aren't intercepted
-            by the React Flow pane. Sits above with z-10. */}
+            by the React Flow pane. Sits above with z-10. Shifted up slightly
+            to account for the header + top toolbar visual weight. */}
         {network.nodes.length === 0 && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center pb-[12vh]">
             <div className="pointer-events-auto flex flex-col items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-zinc-900/80 ring-1 ring-zinc-800">
                 <Network className="h-6 w-6 text-cyan-400" />
