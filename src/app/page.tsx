@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ReactorCanvas } from "@/components/reactor/ReactorCanvas";
 import { CopilotSidecar } from "@/components/reactor/CopilotSidecar";
 import { DeepDiveOverlay } from "@/components/reactor/DeepDiveOverlay";
@@ -29,8 +29,6 @@ import { Button } from "@/components/ui/button";
 import { useTopology } from "@/lib/store/topology";
 import {
   Network,
-  ShieldCheck,
-  AlertTriangle,
   FileJson,
   Plus,
   FolderOpen,
@@ -38,82 +36,7 @@ import {
   Trash2,
   Library,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-function ReconcilerBar() {
-  const report = useTopology((s) => s.report);
-  const network = useTopology((s) => s.network);
-
-  const diagnostics = report?.reconcilerDiagnostics ?? [];
-  const totalFeed = useMemo(
-    () =>
-      network.nodes
-        .filter((n) => n.type === "feed")
-        .reduce((s, n) => s + (n.params.feedRate ?? 0), 0),
-    [network],
-  );
-  const totalProduct = useMemo(() => {
-    if (!report) return 0;
-    return network.nodes
-      .filter((n) => n.type === "product")
-      .reduce((s, n) => s + (report.results[n.id]?.outletFlow ?? 0), 0);
-  }, [report, network]);
-
-  const networkConversion = totalFeed > 0 ? (1 - totalProduct / totalFeed) * 100 : 0;
-  const status = report?.overallStatus ?? "nominal";
-
-  return (
-    <footer className="shrink-0 border-t border-zinc-800/80 bg-zinc-950">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-1.5 text-[11px]">
-        <div className="flex items-center gap-1.5 text-zinc-400">
-          <Network className="h-3 w-3 text-cyan-400" />
-          <span className="font-mono text-zinc-300">{network.meta.species}</span>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-zinc-500">
-          <span className="font-mono">
-            {network.nodes.length} units · {network.streams.length} streams
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-zinc-500">
-          <span>
-            <span className="font-mono text-zinc-300">
-              {totalFeed.toFixed(1)} → {totalProduct.toFixed(1)} mol/s
-            </span>
-            <span className="ml-1 text-cyan-400">{networkConversion.toFixed(1)}% conv</span>
-          </span>
-        </div>
-
-        <div
-          className={cn(
-            "ml-auto flex items-center gap-1.5 rounded px-2 py-0.5 font-semibold uppercase tracking-wide",
-            status === "nominal" && "bg-emerald-500/10 text-emerald-400",
-            status === "warning" && "bg-amber-500/10 text-amber-400",
-            status === "error" && "bg-red-500/10 text-red-400",
-          )}
-        >
-          {status === "nominal" ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-          {status}
-        </div>
-      </div>
-
-      {diagnostics.length > 0 && (
-        <div className="border-t border-zinc-800/60 bg-amber-500/[0.03] px-4 py-1">
-          <div className="eng-scroll flex max-h-10 items-start gap-2 overflow-y-auto">
-            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500/80" />
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-amber-300/60">
-              {diagnostics.map((d, i) => (
-                <span key={i} className="font-mono">· {d}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </footer>
-  );
-}
 
 function Header() {
   const serialize = useTopology((s) => s.serialize);
@@ -326,7 +249,6 @@ export default function Page() {
       <CandidateComparison />
       <ResponseSurface />
       <StreamTable />
-      <ReconcilerBar />
       <ConfigurationDialog />
     </div>
   );

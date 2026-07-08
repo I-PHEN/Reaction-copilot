@@ -2,6 +2,7 @@
 
 import { memo, useMemo } from "react";
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, useInternalNode, type EdgeProps } from "@xyflow/react";
+import { cn } from "@/lib/utils";
 
 /**
  * StreamEdge — orthogonal (stepped) routing with node avoidance.
@@ -62,7 +63,10 @@ function StreamEdgeImpl({
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             pointerEvents: "none",
           }}
-          className="rounded bg-zinc-950/85 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
+          className={cn(
+            "rounded bg-zinc-950/90 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 transition-opacity",
+            selected ? "opacity-100" : "opacity-0 hover:opacity-100",
+          )}
         >
           {flow.toFixed(1)}
         </div>

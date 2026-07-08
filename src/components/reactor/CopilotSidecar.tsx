@@ -483,29 +483,24 @@ export function CopilotSidecar() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-950">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 py-2.5">
-        <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-        <span className="text-[13px] font-medium text-zinc-200">Synthesis Copilot</span>
-        <span className="ml-auto font-mono text-[10px] text-zinc-600">verified solvers</span>
-      </div>
-
-      {/* Quick actions */}
-      <div className="shrink-0 border-b border-zinc-800/80 px-3 py-2">
-        <div className="eng-scroll flex gap-1.5 overflow-x-auto pb-0.5">
-          {QUICK_ACTIONS.map((a) => (
-            <button
-              key={a.id}
-              disabled={isGenerating}
-              onClick={() => runPrompt(a.prompt)}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:opacity-40"
-            >
-              <a.icon className="h-3 w-3 text-cyan-500/70" />
-              {a.label}
-            </button>
-          ))}
+      {/* Quick actions — only show in empty state (onboarding affordance) */}
+      {messages.length === 0 && !isGenerating && (
+        <div className="shrink-0 px-3 py-2">
+          <div className="eng-scroll flex gap-1.5 overflow-x-auto pb-0.5">
+            {QUICK_ACTIONS.map((a) => (
+              <button
+                key={a.id}
+                disabled={isGenerating}
+                onClick={() => runPrompt(a.prompt)}
+                className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:opacity-40"
+              >
+                <a.icon className="h-3 w-3 text-cyan-500/70" />
+                {a.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Chat feed */}
       <div className="relative min-h-0 flex-1">

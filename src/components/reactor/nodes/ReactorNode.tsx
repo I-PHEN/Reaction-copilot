@@ -70,7 +70,7 @@ function ReactorNodeImpl({ id, data, selected }: NodeProps) {
         <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
         <span
           className={cn(
-            "text-[11px] font-medium transition-colors",
+            "text-[12px] font-semibold transition-colors",
             selected ? "text-cyan-300" : "text-zinc-300",
           )}
         >
