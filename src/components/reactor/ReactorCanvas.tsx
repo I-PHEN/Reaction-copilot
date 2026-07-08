@@ -317,31 +317,31 @@ function CanvasInner() {
             </Panel>
           )}
 
-          {/* Empty-state prompt — centered when no nodes exist */}
+          {/* Empty-state prompt — absolutely centered when no nodes exist */}
           {network.nodes.length === 0 && (
-            <Panel position="top-center" className="!m-0 !w-full">
-              <div className="flex flex-col items-center gap-3 pt-[18vh]">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900/80 ring-1 ring-zinc-800">
-                  <Network className="h-5 w-5 text-cyan-400" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="pointer-events-auto flex flex-col items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-zinc-900/80 ring-1 ring-zinc-800">
+                  <Network className="h-6 w-6 text-cyan-400" />
                 </div>
                 <div className="text-center">
-                  <div className="text-sm font-medium text-zinc-300">Start a reactor network</div>
-                  <div className="text-[11px] text-zinc-600">Add your first unit, or ask the copilot to design one.</div>
+                  <div className="text-[15px] font-medium text-zinc-200">Start a reactor network</div>
+                  <div className="mt-0.5 text-[12px] text-zinc-600">Add your first unit, or ask the copilot to design one.</div>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-2">
                   {(["feed", "cstr", "pfr", "separator"] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() => addNode(t)}
-                      className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
+                      className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-[12px] font-medium text-zinc-300 backdrop-blur transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-3.5 w-3.5" />
                       {t.toUpperCase()}
                     </button>
                   ))}
                 </div>
               </div>
-            </Panel>
+            </div>
           )}
         </ReactFlow>
 

@@ -287,7 +287,6 @@ export function CopilotSidecar() {
   const setOptimization = useTopology((s) => s.setOptimization);
   const network = useTopology((s) => s.network);
   const report = useTopology((s) => s.report);
-  const chemistry = useTopology((s) => s.chemistry);
 
   const feedRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -366,7 +365,6 @@ export function CopilotSidecar() {
             context: {
               topology: network,
               report,
-              chemistry,
             },
           }),
           signal: controller.signal,
@@ -448,7 +446,7 @@ export function CopilotSidecar() {
         abortRef.current = null;
       }
     },
-    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, setOptimization, network, report, chemistry, streamText],
+    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, setOptimization, network, report, streamText],
   );
 
   const stop = useCallback(() => {
