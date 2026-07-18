@@ -47,11 +47,12 @@ them, so propagated flow never affects conversion anywhere.
 1. Existing 35 tests stay green except the series-propagation assertion,
    which is updated to the now-correct physics (CSTR's F_A0 = feed outlet).
 2. **Analytic benchmark:** feed → mixer → CSTR → separator with bottoms
-   recycled to the mixer. With first-order X(M) = a/(M+a), a = k·V·CA0,
-   steady-state mixer flow M satisfies α·M² + (a − (1−α)·a... — the test
-   solves the fixed-point equation `M = F0 + (1−α)·M²/(M+a)` independently
-   (bisection in the test file) and asserts the orchestrator's converged
-   mixer/separator flows match within 1e-4.
+   recycled to the mixer. With first-order X(M) = a/(M+a) where a = k·V·CA0,
+   the CSTR outlet is M·(1−X) = M²/(M+a) and the steady-state mixer flow M
+   satisfies the fixed-point equation `M = F0 + (1−α)·M²/(M+a)`. The test
+   solves that equation independently (bisection in the test file) and
+   asserts the orchestrator's converged mixer/CSTR/separator flows match
+   within 1e-4.
 3. **Self-consistency invariant:** after solving any cyclic network, each
    node's summed upstream outlet flows equal the inlet flow it was solved
    with (< 1e-6 relative).
