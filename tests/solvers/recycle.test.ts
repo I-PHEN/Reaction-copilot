@@ -103,10 +103,13 @@ describe("solveNetwork — recycle loop convergence (analytic benchmark)", () =>
     const mixerOut = report.results["m1"].outletFlow;
     const sepOut = report.results["sep"].outletFlow;
     const cstr = report.results["r1"];
-    // Mixer outlet == feed + recycle bottoms.
-    expect(mixerOut).toBeCloseTo(F0 + sepOut, 6);
+    // Spec criterion: self-consistency within 1e-6 *relative* (the fixed-point
+    // iteration stops at flowTolerance, so linked quantities agree to that order).
+    expect(Math.abs(mixerOut - (F0 + sepOut))).toBeLessThan(1e-6 * mixerOut);
     // CSTR outlet == its inlet (mixer outlet) times (1 - X).
-    expect(cstr.outletFlow).toBeCloseTo(mixerOut * (1 - cstr.conversion), 6);
+    expect(Math.abs(cstr.outletFlow - mixerOut * (1 - cstr.conversion))).toBeLessThan(
+      1e-6 * mixerOut,
+    );
   });
 });
 
