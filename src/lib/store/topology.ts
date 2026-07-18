@@ -443,7 +443,6 @@ export const useTopology = create<TopologyState>((set, get) => ({
       inspectedNodeId: null,
       pinnedNodeIds: [],
       copilotMessages: [],
-      reasoning: [],
       isGenerating: false,
     });
     queueMicrotask(() => get().runSolvers());
