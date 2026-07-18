@@ -31,11 +31,8 @@ function solveCSTRConversion(
 ): { conversion: number; iterations: number; converged: boolean } {
   // For n=1, use the analytic solution.
   if (Math.abs(n - 1) < 1e-9) {
+    // Da = k*V*CA0/F_A0 = k*tau (since F_A0 = v0*CA0) ⇒ X = Da/(1+Da).
     const Da = k * volume * CA0 / (feedRate > 0 ? feedRate : 1);
-    // Wait — Da for first order is k*tau = k*V/v0. And X = Da/(1+Da).
-    // But F_A0 = v0*CA0, so feedRate/v0 = CA0. Let me use the direct form:
-    // X = k*V*CA0 / (F_A0 + k*V*CA0) — but that's the same as Da/(1+Da) when
-    // Da = k*V*CA0/F_A0 = k*tau (since F_A0 = v0*CA0 => V*CA0/F_A0 = V/v0 = tau).
     const x = Da / (1 + Da);
     return { conversion: x, iterations: 0, converged: Number.isFinite(x) };
   }

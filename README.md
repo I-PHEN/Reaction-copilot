@@ -34,7 +34,9 @@ General-purpose LLMs (ChatGPT, Gemini) fail at reaction engineering because they
 
 | Layer | Technology |
 |-------|-----------|
+| Runtime | Node 22 + npm |
 | Framework | Next.js 16 (App Router, Turbopack) |
+| Tests | Vitest (solver layer pinned to analytic solutions) |
 | Language | TypeScript 5 |
 | Canvas | React Flow (`@xyflow/react`) |
 | State | Zustand |
@@ -48,16 +50,23 @@ General-purpose LLMs (ChatGPT, Gemini) fail at reaction engineering because they
 
 ```bash
 # Install dependencies
-bun install
+npm install
 
 # Start the dev server (port 3000)
-bun run dev
+npm run dev
 
-# Lint
-bun run lint
+# Lint / type-safe build / solver tests
+npm run lint
+npm run build
+npm test
 ```
 
 Open `http://localhost:3000` in your browser.
+
+> **AI features:** the copilot chat calls Z.ai through `z-ai-web-dev-sdk`, which
+> requires a `.z-ai-config` file (gitignored) in the project or home directory.
+> Without it the canvas, solvers, Deep Dive, and optimizer all still work — only
+> the natural-language chat is disabled.
 
 ## Project structure
 

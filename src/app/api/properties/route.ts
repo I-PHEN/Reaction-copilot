@@ -26,8 +26,9 @@ export async function GET(req: Request) {
     // 1. Try the local curated database first (has real ΔHf, Cp, etc.)
     const local = lookupCompound(name);
     if (local) {
+      // The compound record carries its own provenance (e.g. "NIST WebBook").
       return NextResponse.json(
-        { source: "local", ...local },
+        { ...local },
         { status: 200 },
       );
     }

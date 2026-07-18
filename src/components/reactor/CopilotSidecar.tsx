@@ -1,298 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import {
-  ArrowUp,
-  Square,
-  Sparkles,
-  Zap,
-  Recycle,
-  Gauge,
-  FlaskConical,
-  Brain,
-  ChevronDown,
-  Copy,
-  Check,
-  RotateCcw,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUp, RotateCcw, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useTopology, type CopilotMessage } from "@/lib/store/topology";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
-import { optimizeReactor, type ReactorNetwork } from "@/lib/solvers";
+import { EXAMPLE_PROMPTS, QUICK_ACTIONS } from "./copilot/constants";
+import { Composer } from "./copilot/Composer";
+import { CopilotBody, CopyButton, ThinkingBlock, Timestamp } from "./copilot/MessageParts";
+import { useCopilotStream } from "./copilot/useCopilotStream";
 
-const QUICK_ACTIONS = [
-  { id: "optimize-yield", label: "Optimize yield", icon: Zap, prompt: "Optimize this network for maximum yield of B. Increase reactor volumes and temperature within safe limits to push conversion above 90%, and verify the kinetic model still converges." },
-  { id: "add-recycle", label: "Add recycle", icon: Recycle, prompt: "Add a recycle loop from the separator back to the first reactor to recover unreacted A and improve overall conversion. Include a mixer before the first reactor." },
-  { id: "two-stage", label: "2-stage train", icon: Gauge, prompt: "Design a two-stage reactor train: a CSTR followed by a PFR in series, with a feed of A at 10 mol/s, CA0 5 mol/m3, v0 2 m3/s, targeting 95% conversion of the first-order reaction A -> B." },
-  { id: "separation", label: "Separation", icon: FlaskConical, prompt: "Add a separator after the reactor train to split product B from unreacted A, with a light-key split fraction of 0.9, followed by a product stream." },
-];
-
-const EXAMPLE_PROMPTS = [
-  "Design a 3-CSTR cascade for 99% conversion of A → B",
-  "Compare CSTR vs PFR for the same reactor volume",
-  "Add a separator and recycle loop to maximize yield",
-  "Design a PFR train targeting 95% conversion at 380 K",
-];
-
-interface CopilotResponse {
-  mode?: "multi" | "analyze" | "generate" | "optimize";
-  message: string;
-  reasoning: string[];
-  topology: ReactorNetwork | null;
-  candidates?: { label: string; rationale: string; topology: ReactorNetwork }[];
-  optimize?: {
-    nodeId: string;
-    objective: string;
-    volumeRange: [number, number];
-    temperatureRange: [number, number];
-  };
-}
-
-function fmtTime(ts: number) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-const emptySubscribe = () => () => {};
-function useIsClient() {
-  return useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false,
-  );
-}
-function Timestamp({ ts }: { ts: number }) {
-  const mounted = useIsClient();
-  if (!mounted || ts === 0) return null;
-  return <>{fmtTime(ts)}</>;
-}
-
-/* ------------------------------------------------------------------ */
-/* Markdown copilot body                                                */
-/* ------------------------------------------------------------------ */
-function CopilotBody({ content }: { content: string }) {
-  return (
-    <div className="text-[12.5px] leading-relaxed text-zinc-300 [&_a]:text-cyan-400 [&_a]:underline [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[11px] [&_code]:text-cyan-200 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:my-1 [&_strong]:text-zinc-100 [&_ul]:list-disc [&_ul]:pl-4">
-      <ReactMarkdown>{content}</ReactMarkdown>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Copy button — appears on hover of copilot messages                  */
-/* ------------------------------------------------------------------ */
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("Could not copy");
-    }
-  };
-  return (
-    <button
-      onClick={onCopy}
-      className="rounded p-1 text-zinc-600 opacity-0 transition-all hover:bg-zinc-800 hover:text-zinc-300 group-hover:opacity-100"
-      title="Copy"
-    >
-      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Thinking block — inline in the chat feed                             */
-/* ------------------------------------------------------------------ */
-function ThinkingBlock({ message }: { message: CopilotMessage }) {
-  const active = !message.done;
-  const steps = message.steps ?? [];
-  const duration = message.durationMs ? (message.durationMs / 1000).toFixed(1) : null;
-
-  const [userToggled, setToggled] = useState(false);
-  const [userOpen, setUserOpen] = useState(false);
-  const open = active ? true : userToggled ? userOpen : false;
-
-  return (
-    <div className="flex justify-start">
-      <div className="w-full max-w-[92%]">
-        <Collapsible
-          open={open}
-          onOpenChange={(v) => {
-            setToggled(true);
-            setUserOpen(v);
-          }}
-        >
-          <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors hover:bg-zinc-900/50">
-            <Brain className={cn("h-3 w-3", active ? "text-violet-400" : "text-zinc-600")} />
-            {active ? (
-              <>
-                <span className="text-[11px] font-medium text-zinc-400">Thinking</span>
-                <span className="flex gap-0.5">
-                  <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400" />
-                  <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400 [animation-delay:120ms]" />
-                  <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400 [animation-delay:240ms]" />
-                </span>
-              </>
-            ) : (
-              <span className="text-[11px] text-zinc-600">
-                Thought for {duration}s · {steps.length} steps
-              </span>
-            )}
-            <ChevronDown
-              className={cn("ml-auto h-3 w-3 text-zinc-700 transition-transform", open && "rotate-180")}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="ml-4 border-l border-zinc-800 pl-3">
-              <div className="space-y-1 py-1">
-                {steps.map((s) => (
-                  <div key={s.id} className="flex items-start gap-1.5 text-[11px] leading-snug">
-                    <span
-                      className={cn(
-                        "mt-1 h-1 w-1 shrink-0 rounded-full",
-                        s.kind === "select" && "bg-cyan-400",
-                        s.kind === "verify" && "bg-emerald-400",
-                        s.kind === "layout" && "bg-violet-400",
-                        s.kind === "info" && "bg-zinc-600",
-                      )}
-                    />
-                    <span className="text-zinc-500">{s.text}</span>
-                  </div>
-                ))}
-                {active && (
-                  <div className="flex items-center gap-1 pt-0.5 text-[10px] text-zinc-700">
-                    <span className="h-1 w-1 animate-pulse rounded-full bg-zinc-600" />
-                    working…
-                  </div>
-                )}
-              </div>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Circular send button (upward arrow, cyan)                            */
-/* ------------------------------------------------------------------ */
-function SendButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title="Send"
-      className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all",
-        disabled
-          ? "bg-zinc-800 text-zinc-600"
-          : "bg-cyan-500 text-zinc-950 hover:bg-cyan-400 hover:scale-105 active:scale-95",
-      )}
-    >
-      <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Auto-resizing composer                                               */
-/* ------------------------------------------------------------------ */
-function Composer({
-  value,
-  onChange,
-  onSend,
-  onStop,
-  isGenerating,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSend: () => void;
-  onStop: () => void;
-  isGenerating: boolean;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
-  }, [value]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (value.trim() && !isGenerating) onSend();
-    }
-  };
-
-  return (
-    <div className="shrink-0 p-3">
-      <div className="flex items-end gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 transition-all focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-600/50">
-        <textarea
-          ref={ref}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Describe a reactor network…"
-          rows={1}
-          disabled={isGenerating}
-          className="eng-scroll max-h-[144px] flex-1 resize-none bg-transparent text-sm leading-relaxed text-zinc-200 outline-none placeholder:text-zinc-600 disabled:opacity-50"
-        />
-        {isGenerating ? (
-          <button
-            type="button"
-            onClick={onStop}
-            title="Stop"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 transition-all hover:bg-zinc-600 hover:scale-105 active:scale-95"
-          >
-            <Square className="h-3.5 w-3.5 fill-current" />
-          </button>
-        ) : (
-          <SendButton disabled={!value.trim()} onClick={onSend} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Sidecar                                                              */
-/* ------------------------------------------------------------------ */
 export function CopilotSidecar() {
   const [input, setInput] = useState("");
-  const messages = useTopology((s) => s.copilotMessages);
-  const isGenerating = useTopology((s) => s.isGenerating);
-  const pushMessage = useTopology((s) => s.pushMessage);
-  const updateMessage = useTopology((s) => s.updateMessage);
-  const startThinking = useTopology((s) => s.startThinking);
-  const pushReasoning = useTopology((s) => s.pushReasoning);
-  const finalizeThinking = useTopology((s) => s.finalizeThinking);
-  const setGenerating = useTopology((s) => s.setGenerating);
-  const setNetwork = useTopology((s) => s.setNetwork);
-  const setCandidates = useTopology((s) => s.setCandidates);
-  const setOptimization = useTopology((s) => s.setOptimization);
-  const network = useTopology((s) => s.network);
-  const report = useTopology((s) => s.report);
+  const { messages, isGenerating, runPrompt, stop, regenerate, lastCopilotId } =
+    useCopilotStream();
 
   const feedRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const streamTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const onFeedScroll = useCallback(() => {
     const el = feedRef.current;
@@ -316,170 +39,17 @@ export function CopilotSidecar() {
     setShowJump(false);
   }, []);
 
-  // Stream text character-by-character into a message (typing effect).
-  const streamText = useCallback(
-    (msgId: string, fullText: string) => {
-      let i = 0;
-      const chunk = Math.max(2, Math.ceil(fullText.length / 120));
-      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
-      streamTimerRef.current = setInterval(() => {
-        i += chunk;
-        if (i >= fullText.length) {
-          updateMessage(msgId, fullText);
-          if (streamTimerRef.current) clearInterval(streamTimerRef.current);
-          streamTimerRef.current = null;
-          setGenerating(false);
-        } else {
-          updateMessage(msgId, fullText.slice(0, i));
-        }
-      }, 16);
-    },
-    [updateMessage, setGenerating],
-  );
-
-  const runPrompt = useCallback(
-    async (prompt: string) => {
-      if (!prompt.trim() || isGenerating) return;
-      // If streaming is still in progress, stop it first.
-      if (streamTimerRef.current) {
-        clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-      }
+  // Clear the composer and re-stick the feed, then hand off to the hook.
+  const send = useCallback(
+    (prompt: string) => {
       setInput("");
-      pushMessage({ role: "user", content: prompt });
-      setGenerating(true);
       stickToBottomRef.current = true;
-      const thinkId = startThinking();
-      pushReasoning("Parsing engineering intent…", "info");
-      pushReasoning("Loading first-order Arrhenius kinetic model", "verify");
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      try {
-        const res = await fetch("/api/copilot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt,
-            context: {
-              topology: network,
-              report,
-            },
-          }),
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`Copilot error ${res.status}`);
-        const data = (await res.json()) as CopilotResponse;
-
-        for (let i = 0; i < data.reasoning.length; i++) {
-          if (controller.signal.aborted) break;
-          const step = data.reasoning[i];
-          const kind = /select|choose|cstr|pfr/i.test(step)
-            ? "select"
-            : /verify|check|converg|kinetic|constraint/i.test(step)
-              ? "verify"
-              : /layout|position|place|route/i.test(step)
-                ? "layout"
-                : "info";
-          await new Promise((r) => setTimeout(r, 280));
-          pushReasoning(step, kind);
-        }
-
-        if (controller.signal.aborted) {
-          pushReasoning("Stopped by user", "info");
-          finalizeThinking(thinkId);
-          setGenerating(false);
-          return;
-        }
-
-        if (data.mode === "multi" && data.candidates?.length) {
-          setCandidates(data.candidates);
-          pushReasoning(`Generated ${data.candidates.length} candidates · running verified solvers on each`, "verify");
-        } else if (data.mode === "optimize" && data.optimize) {
-          // Run the optimizer locally using the verified solver.
-          const targetNode = network.nodes.find((n) => n.id === data.optimize!.nodeId);
-          if (targetNode) {
-            pushReasoning(`Running parameter sweep: V∈[${data.optimize.volumeRange[0]}, ${data.optimize.volumeRange[1]}] m³, T∈[${data.optimize.temperatureRange[0]}, ${data.optimize.temperatureRange[1]}] K`, "verify");
-            const result = optimizeReactor(
-              targetNode,
-              data.optimize.volumeRange,
-              data.optimize.temperatureRange,
-              12,
-              data.optimize.objective,
-            );
-            setOptimization(result);
-            pushReasoning(`Sweep complete · ${result.evaluations} solver evaluations · optimal X=${(result.optimal.conversion * 100).toFixed(1)}% at V=${result.optimal.volume.toFixed(2)}m³, T=${result.optimal.temperature.toFixed(0)}K`, "verify");
-          }
-        } else if (data.topology?.nodes?.length) {
-          setNetwork(data.topology);
-          pushReasoning("Topology committed · dispatching verified solvers", "info");
-        } else if (!data.topology) {
-          pushReasoning("Analyzed current topology against verified solver report", "verify");
-        }
-        finalizeThinking(thinkId);
-
-        // Push an empty copilot message, then stream the text into it.
-        const msgId = `m${Date.now()}`;
-        pushMessage({ role: "copilot", content: "" });
-        // The message just pushed gets a new id from the store; find it by
-        // looking for the last copilot message with empty content.
-        const state = useTopology.getState();
-        const lastCopilot = [...state.copilotMessages].reverse().find((m) => m.role === "copilot" && m.content === "");
-        const targetId = lastCopilot?.id ?? msgId;
-        streamText(targetId, data.message);
-      } catch (e) {
-        if ((e as Error).name === "AbortError") {
-          pushReasoning("Stopped by user", "info");
-          finalizeThinking(thinkId);
-          setGenerating(false);
-          return;
-        }
-        finalizeThinking(thinkId);
-        setGenerating(false);
-        pushMessage({
-          role: "copilot",
-          content: "Could not reach the reasoning engine. The verified solver layer is still active — adjust parameters in the Deep Dive panel.",
-        });
-        toast.error("Copilot request failed", { description: (e as Error).message });
-      } finally {
-        abortRef.current = null;
-      }
+      runPrompt(prompt);
     },
-    [isGenerating, pushMessage, startThinking, pushReasoning, finalizeThinking, setGenerating, setNetwork, setCandidates, setOptimization, network, report, streamText],
+    [runPrompt],
   );
-
-  const stop = useCallback(() => {
-    if (streamTimerRef.current) {
-      clearInterval(streamTimerRef.current);
-      streamTimerRef.current = null;
-      setGenerating(false);
-    }
-    abortRef.current?.abort();
-  }, [setGenerating]);
-
-  // Regenerate: find the last user message and re-run it.
-  const regenerate = useCallback(() => {
-    if (isGenerating) return;
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUser) runPrompt(lastUser.content);
-  }, [isGenerating, messages, runPrompt]);
-
-  // Find the last copilot message id (for regenerate button placement).
-  const lastCopilotId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "copilot") return messages[i].id;
-    }
-    return null;
-  }, [messages]);
 
   const showExamples = messages.length === 0;
-
-  useEffect(() => {
-    return () => {
-      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
-    };
-  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-950">
@@ -491,7 +61,7 @@ export function CopilotSidecar() {
               <button
                 key={a.id}
                 disabled={isGenerating}
-                onClick={() => runPrompt(a.prompt)}
+                onClick={() => send(a.prompt)}
                 className="flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:opacity-40"
               >
                 <a.icon className="h-3 w-3 text-cyan-500/70" />
@@ -506,7 +76,7 @@ export function CopilotSidecar() {
       <div className="relative min-h-0 flex-1">
         <div ref={feedRef} onScroll={onFeedScroll} className="eng-scroll absolute inset-0 overflow-y-auto">
           <div className="space-y-4 px-4 py-4">
-            {messages.map((m, idx) => {
+            {messages.map((m) => {
               if (m.role === "thinking") {
                 return (
                   <motion.div
@@ -604,7 +174,7 @@ export function CopilotSidecar() {
                   {EXAMPLE_PROMPTS.map((ex) => (
                     <button
                       key={ex}
-                      onClick={() => runPrompt(ex)}
+                      onClick={() => send(ex)}
                       className="block w-full rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-left text-[12px] text-zinc-400 transition-colors hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-200"
                     >
                       {ex}
@@ -631,7 +201,7 @@ export function CopilotSidecar() {
       <Composer
         value={input}
         onChange={setInput}
-        onSend={() => runPrompt(input)}
+        onSend={() => send(input)}
         onStop={stop}
         isGenerating={isGenerating}
       />

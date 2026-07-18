@@ -11,6 +11,8 @@ export interface ReactorNodeData {
   label: string;
   result?: SolverResult;
   flowRate?: number;
+  // React Flow node data must be assignable to Record<string, unknown>.
+  [key: string]: unknown;
 }
 
 const STATUS_DOT: Record<SolverResult["status"], string> = {
